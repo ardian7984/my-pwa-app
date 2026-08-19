@@ -278,9 +278,9 @@
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;">
       <div>
         <div style="font-weight:700;font-size:14px;">Kirim reminder WA</div>
-        <div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">Ke semua warga yang nunggak, 1 klik</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">Pilih satu per satu warga yang mau dikirimi</div>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="bulkReminder()">Kirim</button>
+      <button class="btn btn-primary btn-sm" onclick="openPilihReminder()">Pilih & kirim</button>
     </div>
 
     <div class="section-title">Aksi cepat</div>
@@ -311,6 +311,9 @@
       <button id="filt-semua" class="active" onclick="setIuranFilter('semua')">Semua</button>
       <button id="filt-lunas" onclick="setIuranFilter('lunas')">Lunas</button>
       <button id="filt-nunggak" onclick="setIuranFilter('nunggak')">Nunggak</button>
+    </div>
+    <div class="btn-row" style="margin-bottom:10px;">
+      <button class="btn btn-outline" onclick="openPilihReminder()">🎯 Pilih & kirim reminder</button>
     </div>
     <div id="iuran-list"></div>
   </div>
@@ -418,6 +421,9 @@
     <div class="sheet-handle"></div>
     <div class="sheet-header"><div class="sheet-title" id="form-title">Data warga</div><button class="icon-btn" onclick="closeSheet('sheet-form')">✕</button></div>
     <img id="form-kk-preview" class="kk-preview" style="display:none;">
+    <input type="file" id="kk-file-retake" accept="image/*" capture="environment" style="display:none" onchange="handleKKUpload(event)">
+    <button id="btn-retake-kk" class="btn btn-outline" style="display:none;margin-bottom:14px;" onclick="document.getElementById('kk-file-retake').click()">🔄 Foto ulang KK</button>
+    <div id="scan-warning" style="display:none;background:#FFF3E0;border:1px solid #F5C77E;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#7A4A00;margin-bottom:14px;">⚠️ Hasil baca otomatis kadang meleset (terutama No. KK &amp; NIK). Mohon cek ulang tiap angka dengan teliti sebelum menyimpan.</div>
     <label>No. Kartu Keluarga</label>
     <input id="f-nokk" placeholder="3371xxxxxxxxxxxx">
     <label>Nama Kepala Keluarga</label>
@@ -428,6 +434,8 @@
     </div>
     <label>No. WA warga</label>
     <input id="f-wa" placeholder="6281234567890">
+    <label>Iuran warga per bulan (Rp) <span style="font-weight:400;color:var(--ink-soft)">(kosongkan = pakai iuran default)</span></label>
+    <input id="f-iuran" type="number" inputmode="numeric" placeholder="cth. 50000">
     <label>Anggota keluarga <span style="font-weight:400;color:var(--ink-soft)">(pisahkan dengan baris baru — format: Nama, NIK, status)</span></label>
     <textarea id="f-anggota" placeholder="Budi Santoso, 3371011234560001, Kepala Keluarga
 Ani Santoso, 3371011234560002, Istri"></textarea>
@@ -494,17 +502,62 @@ Ani Santoso, 3371011234560002, Istri"></textarea>
   </div>
 </div>
 
+<!-- SHEET: pilih & kirim reminder -->
+<div class="sheet-backdrop hidden" id="sheet-pilih-reminder" onclick="closeOnBackdrop(event,'sheet-pilih-reminder')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header"><div class="sheet-title">Pilih warga untuk reminder</div><button class="icon-btn" onclick="closeSheet('sheet-pilih-reminder')">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:12.5px;color:var(--ink-soft);" id="pilih-reminder-sub">0 warga nunggak</div>
+      <button class="btn btn-outline btn-sm" onclick="togglePilihSemuaReminder()" id="btn-pilih-semua">Pilih semua</button>
+    </div>
+    <div id="pilih-reminder-list" style="max-height:50vh;overflow-y:auto;"></div>
+    <div style="margin-top:20px;">
+      <button class="btn btn-primary" onclick="kirimReminderTerpilih()">Kirim ke warga terpilih</button>
+    </div>
+  </div>
+</div>
+
 <!-- SHEET: buat undangan -->
 <div class="sheet-backdrop hidden" id="sheet-buat-undangan" onclick="closeOnBackdrop(event,'sheet-buat-undangan')">
   <div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
     <div class="sheet-header"><div class="sheet-title" id="sheet-undangan-title">Buat undangan kumpulan</div><button class="icon-btn" onclick="closeSheet('sheet-buat-undangan')">✕</button></div>
-    <div class="card" style="font-size:12.5px;color:var(--ink-soft);">📍 Tempat & jam sudah otomatis: <b style="color:var(--ink);">19.30 WIB, Serambi Masjid At-Taqwa lama</b>. Tinggal atur tanggal &amp; nama penyelenggara.</div>
-    <label>Tanggal kumpulan (otomatis Sabtu Kliwon)</label>
+    <label>Jenis undangan</label>
+    <select id="u-jenis" onchange="onJenisUndanganChange()">
+      <option value="caos_pemut">🗓️ Caos Pemut (Selapanan Malam Minggu Legi)</option>
+      <option value="rapat">📋 Rapat RT / Warga</option>
+      <option value="kerja_bakti">🧹 Kerja Bakti</option>
+      <option value="pengajian">🕌 Pengajian / Tahlilan / Yasinan</option>
+      <option value="umum">✉️ Acara lainnya (isi manual)</option>
+    </select>
+
+    <div id="u-caos-pemut-info" class="card" style="font-size:12.5px;color:var(--ink-soft);">📍 Tempat & jam sudah otomatis: <b style="color:var(--ink);">19.30 WIB, Serambi Masjid At-Taqwa lama</b>. Tinggal atur tanggal &amp; nama penyelenggara.</div>
+
+    <div id="u-judul-wrap" style="display:none;">
+      <label>Judul acara</label>
+      <input id="u-judul" placeholder="cth. Rapat Persiapan 17 Agustus">
+    </div>
+
+    <label>Tanggal <span id="u-tanggal-hint" style="font-weight:400;color:var(--ink-soft)">(otomatis Sabtu Kliwon)</span></label>
     <input type="date" id="u-tanggal">
     <div id="u-tanggal-info" class="mono" style="font-size:12px;color:var(--primary-dark);margin-top:6px;"></div>
-    <label>Penyelenggara (tuan rumah)</label>
+
+    <div id="u-jam-tempat-wrap" style="display:none;">
+      <div class="field-2">
+        <div><label>Jam</label><input id="u-jam" placeholder="19.30 WIB"></div>
+        <div><label>Tempat</label><input id="u-tempat" placeholder="Balai RT / Rumah Bp. ..."></div>
+      </div>
+    </div>
+
+    <label id="u-penyelenggara-label">Penyelenggara (tuan rumah)</label>
     <input id="u-penyelenggara" placeholder="Bp. Ardian">
+
+    <div id="u-catatan-wrap" style="display:none;">
+      <label>Catatan tambahan <span style="font-weight:400;color:var(--ink-soft)">(opsional)</span></label>
+      <textarea id="u-catatan" placeholder="cth. Membawa alat kebersihan masing-masing"></textarea>
+    </div>
+
     <div style="margin-top:20px;">
       <button class="btn btn-primary" onclick="generateUndangan()">Buat undangan</button>
     </div>
@@ -623,7 +676,7 @@ function goto(view){
 /* ============ SHEETS ============ */
 function openSheet(id){ document.getElementById(id).classList.remove('hidden'); }
 function closeSheet(id){ document.getElementById(id).classList.add('hidden'); }
-function closeOnBackdrop(e,id){ if(e.target.id===id) closeSheet(id); }
+function closeOnBackdrop(e,id){ /* dinonaktifkan: dialog tidak lagi tertutup otomatis saat klik di luar box, supaya data yang sedang diisi tidak hilang tanpa sengaja. Tutup lewat tombol ✕ atau tombol Batal. */ }
 
 function toast(msg){
   const t=document.createElement('div');
@@ -674,7 +727,9 @@ function openManualForm(){
   editingWargaId = null;
   document.getElementById('form-title').textContent = 'Tambah data warga';
   document.getElementById('form-kk-preview').style.display='none';
-  ['f-nokk','f-kepala','f-alamat','f-blok','f-wa','f-anggota'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('btn-retake-kk').style.display='none';
+  document.getElementById('scan-warning').style.display='none';
+  ['f-nokk','f-kepala','f-alamat','f-blok','f-wa','f-iuran','f-anggota'].forEach(id=>document.getElementById(id).value='');
   openSheet('sheet-form');
 }
 
@@ -693,18 +748,21 @@ async function handleKKUpload(e){
       document.getElementById('form-title').textContent = 'Konfirmasi data hasil scan';
       document.getElementById('form-kk-preview').src = pendingKKImage;
       document.getElementById('form-kk-preview').style.display='block';
+      document.getElementById('btn-retake-kk').style.display='block';
+      document.getElementById('scan-warning').style.display='block';
       document.getElementById('f-nokk').value = extracted.no_kk||'';
       document.getElementById('f-kepala').value = extracted.kepala_keluarga||'';
       document.getElementById('f-alamat').value = extracted.alamat||'';
       document.getElementById('f-blok').value = '';
       document.getElementById('f-wa').value = '';
+      document.getElementById('f-iuran').value = '';
       const anggotaText = (extracted.anggota||[]).map(a=>[a.nama||'',a.nik||'',a.status||''].join(', ')).join('\n');
       document.getElementById('f-anggota').value = anggotaText;
       openSheet('sheet-form');
       if(extracted.anggota && extracted.anggota.length){
-        toast('✅ Data terbaca — mohon dicek dulu, terutama No. KK, sebelum disimpan');
+        toast('✅ Sebagian data terbaca — cek & lengkapi dulu sebelum disimpan, terutama No. KK & NIK');
       } else {
-        toast('⚠️ Tulisan sulit terbaca. Silakan lengkapi manual.');
+        toast('⚠️ Tulisan sulit terbaca. Silakan lengkapi manual, atau coba foto ulang lebih terang & lurus.');
       }
     }catch(err){
       console.error(err);
@@ -838,6 +896,7 @@ function saveWarga(){
     alamat: document.getElementById('f-alamat').value.trim(),
     blok: document.getElementById('f-blok').value.trim(),
     wa: document.getElementById('f-wa').value.trim(),
+    iuran: parseInt(document.getElementById('f-iuran').value)||null,
     anggota: parseAnggota(document.getElementById('f-anggota').value)
   };
   if(editingWargaId){
@@ -864,6 +923,7 @@ function openDetailWarga(id){
         <div>
           <div class="mono" style="font-size:12px;color:var(--ink-soft);">No. KK: ${w.noKK||'-'}</div>
           <div style="font-size:13.5px;margin-top:4px;">${w.alamat||'-'} ${w.blok?('· '+w.blok):''}</div>
+          <div style="font-size:12.5px;margin-top:4px;color:var(--ink-soft);">Iuran/bulan: <b class="mono" style="color:var(--ink);">${rupiah(w.iuran || STATE.profil.iuranDefault || 0)}</b>${w.iuran?'':' (default)'}</div>
         </div>
         <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'LUNAS':'NUNGGAK'}</span>
       </div>
@@ -898,11 +958,14 @@ function editWarga(id){
   editingWargaId = id;
   document.getElementById('form-title').textContent = 'Edit data warga';
   document.getElementById('form-kk-preview').style.display='none';
+  document.getElementById('btn-retake-kk').style.display='none';
+  document.getElementById('scan-warning').style.display='none';
   document.getElementById('f-nokk').value = w.noKK||'';
   document.getElementById('f-kepala').value = w.kepala||'';
   document.getElementById('f-alamat').value = w.alamat||'';
   document.getElementById('f-blok').value = w.blok||'';
   document.getElementById('f-wa').value = w.wa||'';
+  document.getElementById('f-iuran').value = w.iuran||'';
   document.getElementById('f-anggota').value = w.anggota.map(a=>[a.nama,a.nik,a.status].join(', ')).join('\n');
   openSheet('sheet-form');
 }
@@ -972,7 +1035,8 @@ function waReminder(id){
   const w = STATE.warga.find(x=>x.id===id);
   if(!w) return;
   const nomor = (w.wa||'').replace(/[^0-9]/g,'');
-  const msg = `Assalamualaikum Bapak/Ibu ${w.kepala}, mengingatkan iuran warga bulan ${monthLabel(currentBulan)} sebesar ${rupiah(STATE.profil.iuranDefault)} belum tercatat lunas. Mohon konfirmasi jika sudah transfer ya. Terima kasih 🙏 - Pengurus ${STATE.profil.nama}`;
+  const nominal = w.iuran || STATE.profil.iuranDefault || 0;
+  const msg = `Assalamualaikum Bapak/Ibu ${w.kepala}, mengingatkan iuran warga bulan ${monthLabel(currentBulan)} sebesar ${rupiah(nominal)} belum tercatat lunas. Mohon konfirmasi jika sudah transfer ya. Terima kasih 🙏 - Pengurus ${STATE.profil.nama}`;
   const url = nomor ? `https://wa.me/${nomor}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url,'_blank');
 }
@@ -981,6 +1045,49 @@ function bulkReminder(){
   if(nunggak.length===0){ toast('Semua warga sudah lunas 🎉'); return; }
   toast(`Membuka WA untuk ${nunggak.length} warga nunggak...`);
   nunggak.forEach((w,i)=> setTimeout(()=>waReminder(w.id), i*400) );
+}
+
+/* ============ PILIH & KIRIM REMINDER (satu-satu per KK) ============ */
+let reminderSelectedIds = new Set();
+function openPilihReminder(){
+  const nunggak = STATE.warga.filter(w=>!isLunas(w.id));
+  if(nunggak.length===0){ toast('Semua warga sudah lunas bulan ini 🎉'); return; }
+  reminderSelectedIds = new Set(nunggak.map(w=>w.id));
+  renderPilihReminderList();
+  openSheet('sheet-pilih-reminder');
+}
+function renderPilihReminderList(){
+  const nunggak = STATE.warga.filter(w=>!isLunas(w.id));
+  document.getElementById('pilih-reminder-sub').textContent = nunggak.length + ' warga nunggak bulan ' + monthLabel(currentBulan);
+  document.getElementById('btn-pilih-semua').textContent = (reminderSelectedIds.size===nunggak.length && nunggak.length>0) ? 'Batal pilih semua' : 'Pilih semua';
+  document.getElementById('pilih-reminder-list').innerHTML = nunggak.map(w=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);">
+      <input type="checkbox" ${reminderSelectedIds.has(w.id)?'checked':''} onchange="toggleReminderPilih('${w.id}', this.checked)" style="width:18px;height:18px;flex-shrink:0;">
+      <div style="flex:1;">
+        <div style="font-weight:600;font-size:13.5px;">${w.kepala}</div>
+        <div style="font-size:12px;color:var(--ink-soft);">${w.noKK||'No KK -'} · ${rupiah(w.iuran||STATE.profil.iuranDefault||0)}${w.wa?'':' · ⚠️ no. WA belum diisi'}</div>
+      </div>
+    </label>`).join('');
+}
+function toggleReminderPilih(id, checked){
+  if(checked) reminderSelectedIds.add(id); else reminderSelectedIds.delete(id);
+  renderPilihReminderList();
+}
+function togglePilihSemuaReminder(){
+  const nunggak = STATE.warga.filter(w=>!isLunas(w.id));
+  if(reminderSelectedIds.size === nunggak.length){
+    reminderSelectedIds.clear();
+  } else {
+    reminderSelectedIds = new Set(nunggak.map(w=>w.id));
+  }
+  renderPilihReminderList();
+}
+function kirimReminderTerpilih(){
+  const ids = Array.from(reminderSelectedIds);
+  if(ids.length===0){ toast('Pilih minimal 1 warga dulu'); return; }
+  toast(`Membuka WA untuk ${ids.length} warga terpilih...`);
+  closeSheet('sheet-pilih-reminder');
+  ids.forEach((id,i)=> setTimeout(()=>waReminder(id), i*400) );
 }
 
 /* ============ WARGA LIST (tab) ============ */
@@ -1016,7 +1123,8 @@ function renderDashboard(){
   document.getElementById('d-lunas').textContent = lunasCount;
   document.getElementById('d-nunggak').textContent = total - lunasCount;
   document.getElementById('d-total-kk').textContent = total;
-  document.getElementById('d-total-uang').textContent = rupiah(lunasCount * (STATE.profil.iuranDefault||0));
+  const totalUangBulanIni = STATE.warga.filter(w=>isLunas(w.id, monthKey(new Date()))).reduce((sum,w)=> sum + (w.iuran || STATE.profil.iuranDefault || 0), 0);
+  document.getElementById('d-total-uang').textContent = rupiah(totalUangBulanIni);
   document.getElementById('tb-sub').textContent = STATE.profil.nama + (STATE.profil.ketua ? (' · '+STATE.profil.ketua) : '');
 
   const nunggakList = STATE.warga.filter(w=>!isLunas(w.id, monthKey(new Date()))).slice(0,5);
@@ -1199,14 +1307,20 @@ function renderUndanganList(){
     el.innerHTML = `<div class="empty"><div class="big">🗓️</div>Belum ada undangan dibuat.</div>`;
     return;
   }
-  el.innerHTML = STATE.undangan.slice(0,20).map(u=>`
+  el.innerHTML = STATE.undangan.slice(0,20).map(u=>{
+    const jenis = u.jenis || 'caos_pemut';
+    const judulTampil = jenis==='caos_pemut' ? JENIS_UNDANGAN_LABEL.caos_pemut : (u.judul || JENIS_UNDANGAN_LABEL[jenis] || 'Undangan');
+    const subTampil = jenis==='caos_pemut' ? ('Penyelenggara: ' + (u.penyelenggara||'-')) : ([u.tempat, u.penyelenggara].filter(Boolean).join(' · ') || '-');
+    const badgeTampil = jenis==='caos_pemut' ? u.pasaran : JENIS_UNDANGAN_LABEL[jenis];
+    return `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="reopenUndangan('${u.id}')">
         <div>
-          <div style="font-weight:600;font-size:14px;">${fmtTanggalIndo(new Date(u.tanggalAcara))}</div>
-          <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Penyelenggara: ${u.penyelenggara}</div>
+          <div style="font-weight:600;font-size:14px;">${judulTampil}</div>
+          <div style="font-size:12.5px;color:var(--ink-soft);margin-top:1px;">${fmtTanggalIndo(new Date(u.tanggalAcara))}</div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">${subTampil}</div>
         </div>
-        <span class="badge lunas">${u.pasaran}</span>
+        <span class="badge lunas">${badgeTampil}</span>
       </div>
       <div class="swipe-actions">
         <button class="btn btn-outline btn-sm" onclick="reopenUndangan('${u.id}')">👁️ Lihat</button>
@@ -1214,26 +1328,37 @@ function renderUndanganList(){
         <button class="btn btn-outline btn-sm" style="color:var(--warn);" onclick="deleteUndangan('${u.id}')">🗑️ Hapus</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 let editingUndanganId = null;
 function openBuatUndangan(){
   editingUndanganId = null;
-  document.getElementById('sheet-undangan-title').textContent = 'Buat undangan kumpulan';
+  document.getElementById('sheet-undangan-title').textContent = 'Buat undangan';
+  document.getElementById('u-jenis').value = 'caos_pemut';
   const next = nextSabtuKliwon(new Date());
   document.getElementById('u-tanggal').value = next ? toInputDate(next) : '';
   document.getElementById('u-penyelenggara').value = '';
-  updateTanggalInfo();
+  document.getElementById('u-judul').value = '';
+  document.getElementById('u-jam').value = '';
+  document.getElementById('u-tempat').value = '';
+  document.getElementById('u-catatan').value = '';
+  onJenisUndanganChange();
   openSheet('sheet-buat-undangan');
 }
 function editUndangan(id){
   const u = STATE.undangan.find(x=>x.id===id);
   if(!u) return;
   editingUndanganId = id;
-  document.getElementById('sheet-undangan-title').textContent = 'Edit undangan kumpulan';
+  document.getElementById('sheet-undangan-title').textContent = 'Edit undangan';
+  document.getElementById('u-jenis').value = u.jenis || 'caos_pemut';
   document.getElementById('u-tanggal').value = toInputDate(new Date(u.tanggalAcara));
-  document.getElementById('u-penyelenggara').value = u.penyelenggara;
-  updateTanggalInfo();
+  document.getElementById('u-penyelenggara').value = u.penyelenggara || '';
+  document.getElementById('u-judul').value = u.judul || '';
+  document.getElementById('u-jam').value = u.jam || '';
+  document.getElementById('u-tempat').value = u.tempat || '';
+  document.getElementById('u-catatan').value = u.catatan || '';
+  onJenisUndanganChange();
   openSheet('sheet-buat-undangan');
 }
 function deleteUndangan(id){
@@ -1252,10 +1377,51 @@ function updateTanggalInfo(){
   const info = document.getElementById('u-tanggal-info');
   if(!val){ info.textContent=''; return; }
   const d = new Date(val+'T00:00:00');
+  const jenisEl = document.getElementById('u-jenis');
+  const jenis = jenisEl ? jenisEl.value : 'caos_pemut';
+  if(jenis!=='caos_pemut'){
+    info.textContent = fmtTanggalIndo(d);
+    info.style.color = 'var(--primary-dark)';
+    return;
+  }
   const p = pasaranOf(d);
   const cocok = isSabtuKliwon(d);
   info.textContent = fmtTanggalIndo(d) + ' — Pasaran ' + p + (cocok ? ' ✓ (Sabtu Kliwon)' : ' (bukan Sabtu Kliwon, tetap bisa dipakai)');
   info.style.color = cocok ? 'var(--primary-dark)' : 'var(--warn)';
+}
+
+const JENIS_UNDANGAN_LABEL = {
+  caos_pemut: 'Caos Pemut (Selapanan)',
+  rapat: 'Rapat RT / Warga',
+  kerja_bakti: 'Kerja Bakti',
+  pengajian: 'Pengajian / Tahlilan / Yasinan',
+  umum: 'Undangan'
+};
+const JENIS_UNDANGAN_JUDUL_DEFAULT = {
+  rapat: 'Rapat RT / Warga',
+  kerja_bakti: 'Kerja Bakti',
+  pengajian: 'Pengajian / Tahlilan / Yasinan',
+  umum: ''
+};
+function onJenisUndanganChange(){
+  const jenis = document.getElementById('u-jenis').value;
+  const isCaos = jenis==='caos_pemut';
+  document.getElementById('u-caos-pemut-info').style.display = isCaos ? 'block' : 'none';
+  document.getElementById('u-judul-wrap').style.display = isCaos ? 'none' : 'block';
+  document.getElementById('u-jam-tempat-wrap').style.display = isCaos ? 'none' : 'block';
+  document.getElementById('u-catatan-wrap').style.display = isCaos ? 'none' : 'block';
+  document.getElementById('u-tanggal-hint').textContent = isCaos ? '(otomatis Sabtu Kliwon)' : '';
+  document.getElementById('u-penyelenggara-label').textContent = isCaos ? 'Penyelenggara (tuan rumah)' : 'Penyelenggara / kontak (opsional)';
+  document.getElementById('u-penyelenggara').placeholder = isCaos ? 'Bp. Ardian' : 'Pengurus RT (opsional)';
+  if(!isCaos){
+    const judulEl = document.getElementById('u-judul');
+    if(!judulEl.value) judulEl.value = JENIS_UNDANGAN_JUDUL_DEFAULT[jenis] || '';
+    const jamEl = document.getElementById('u-jam');
+    if(!jamEl.value) jamEl.value = '19.30 WIB';
+    const tempatEl = document.getElementById('u-tempat');
+    if(!tempatEl.value) tempatEl.value = 'Balai RT';
+  }
+  updateTanggalInfo();
 }
 
 const ICON_CALENDAR = `<svg width="30" height="30" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2.5" fill="#3A2A1E"/><rect x="6.5" y="1.5" width="2.2" height="5" rx="1.1" fill="#3A2A1E"/><rect x="15.3" y="1.5" width="2.2" height="5" rx="1.1" fill="#3A2A1E"/><rect x="6" y="9.2" width="3.1" height="3.1" fill="#EFE3C9"/><rect x="10.4" y="9.2" width="3.1" height="3.1" fill="#EFE3C9"/><rect x="14.8" y="9.2" width="3.1" height="3.1" fill="#EFE3C9"/><rect x="6" y="13.8" width="3.1" height="3.1" fill="#EFE3C9"/><path d="M14 14.6l1.3 1.3 2.5-2.9" stroke="#EFE3C9" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1275,8 +1441,64 @@ const COFFEE_CUP = `<svg width="92" height="92" viewBox="0 0 100 110" fill="none
   <ellipse cx="45" cy="86" rx="32" ry="5.5"/>
 </svg>`;
 
-function buildUndanganHTML(tanggalDate, penyelenggara, pasaran){
+function buildUndanganHTML(u){
+  const jenis = u.jenis || 'caos_pemut';
+  const tanggalDate = new Date(u.tanggalAcara);
   const namaSingkat = STATE.profil.namaSingkat || 'RT 01';
+
+  if(jenis==='caos_pemut'){
+    return `
+    <div class="undangan-sheet" style="width:100%;aspect-ratio:1000/1414;position:relative;overflow:hidden;box-sizing:border-box;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(107,74,46,.05), transparent 40%),
+        radial-gradient(circle at 85% 75%, rgba(107,74,46,.06), transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(107,74,46,.03), transparent 60%),
+        linear-gradient(160deg,#F1E6CC,#E7D5AC 45%,#DFC896 100%);
+      font-family:'Nunito',sans-serif; color:#3A2A1E;">
+      <div style="position:absolute; inset:16px; border:2px solid #6B4A2E; opacity:.5;"></div>
+      <div style="position:absolute; inset:24px; border:1px solid #6B4A2E; opacity:.3;"></div>
+      <div style="position:absolute; top:10px; left:10px; width:78px; height:78px;">${CORNER_FLOURISH}</div>
+      <div style="position:absolute; top:10px; right:10px; width:78px; height:78px; transform:scaleX(-1);">${CORNER_FLOURISH}</div>
+      <div style="position:absolute; bottom:10px; left:10px; width:78px; height:78px; transform:scaleY(-1);">${CORNER_FLOURISH}</div>
+      <div style="position:absolute; bottom:10px; right:10px; width:78px; height:78px; transform:scale(-1,-1);">${CORNER_FLOURISH}</div>
+
+      <div style="position:relative; padding:9% 9% 6%;">
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:22px;">
+          <img src="${LOGO_SRC}" style="width:74px;height:74px;border-radius:50%;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.22);">
+          <div style="font-family:'Playfair Display',serif; font-size:38px; font-weight:700;">Caos Pemut</div>
+        </div>
+
+        <div style="text-align:center; font-size:18px; line-height:1.6; margin:0 2% 24px; color:#4A3625; font-weight:600;">
+          bilih pepanggihan rutin malam Minggu Legi <span style="white-space:nowrap;">${namaSingkat}</span>, badhe kalaksanan mbenjang:
+        </div>
+
+        <div style="border:2.5px solid #4A3625; border-radius:20px; padding:24px 20px;">
+          <div style="display:flex; gap:14px; align-items:center; margin-bottom:18px;">
+            <div style="flex-shrink:0;">${ICON_CALENDAR}</div>
+            <div style="font-size:20px; font-weight:800; line-height:1.3;">${fmtTanggalIndo(tanggalDate)}</div>
+          </div>
+          <div style="display:flex; gap:14px; align-items:center; margin-bottom:18px;">
+            <div style="flex-shrink:0;">${ICON_CLOCK}</div>
+            <div style="font-size:20px; font-weight:800;">19.30 WIB</div>
+          </div>
+          <div style="display:flex; gap:14px; align-items:flex-start;">
+            <div style="flex-shrink:0; margin-top:1px;">${ICON_PIN}</div>
+            <div style="font-size:20px; font-weight:800; line-height:1.35;">${escapeHTML(u.penyelenggara||'')} <span style="font-weight:600;">(Wonten Serambi Masjid At-Taqwa lama)</span></div>
+          </div>
+        </div>
+
+        <div style="margin-top:34px; display:flex; align-items:flex-end; justify-content:space-between;">
+          <div style="font-family:'Playfair Display',serif; font-size:15px; line-height:1.6; color:#4A3625;">
+            Awit Kawigatosan Saha Rawuhipun<br>Katuraken matur nuwun
+          </div>
+          <div style="flex-shrink:0; margin-left:10px;">${COFFEE_CUP}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Jenis undangan umum (Rapat, Kerja Bakti, Pengajian, Lainnya)
+  const judul = u.judul || JENIS_UNDANGAN_LABEL[jenis] || 'Undangan';
   return `
   <div class="undangan-sheet" style="width:100%;aspect-ratio:1000/1414;position:relative;overflow:hidden;box-sizing:border-box;
     background:
@@ -1293,13 +1515,16 @@ function buildUndanganHTML(tanggalDate, penyelenggara, pasaran){
     <div style="position:absolute; bottom:10px; right:10px; width:78px; height:78px; transform:scale(-1,-1);">${CORNER_FLOURISH}</div>
 
     <div style="position:relative; padding:9% 9% 6%;">
-      <div style="display:flex; align-items:center; gap:16px; margin-bottom:22px;">
-        <img src="${LOGO_SRC}" style="width:74px;height:74px;border-radius:50%;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.22);">
-        <div style="font-family:'Playfair Display',serif; font-size:38px; font-weight:700;">Caos Pemut</div>
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
+        <img src="${LOGO_SRC}" style="width:66px;height:66px;border-radius:50%;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.22);">
+        <div>
+          <div style="font-size:13px; letter-spacing:2px; text-transform:uppercase; opacity:.7;">Undangan</div>
+          <div style="font-family:'Playfair Display',serif; font-size:28px; font-weight:700; line-height:1.2;">${escapeHTML(judul)}</div>
+        </div>
       </div>
 
-      <div style="text-align:center; font-size:18px; line-height:1.6; margin:0 2% 24px; color:#4A3625; font-weight:600;">
-        bilih pepanggihan rutin malam Minggu Legi <span style="white-space:nowrap;">${namaSingkat}</span>, badhe kalaksanan mbenjang:
+      <div style="text-align:center; font-size:16px; line-height:1.6; margin:0 2% 22px; color:#4A3625; font-weight:600;">
+        Bapak/Ibu warga <span style="white-space:nowrap;">${escapeHTML(namaSingkat)}</span> dimohon kehadirannya pada:
       </div>
 
       <div style="border:2.5px solid #4A3625; border-radius:20px; padding:24px 20px;">
@@ -1309,17 +1534,19 @@ function buildUndanganHTML(tanggalDate, penyelenggara, pasaran){
         </div>
         <div style="display:flex; gap:14px; align-items:center; margin-bottom:18px;">
           <div style="flex-shrink:0;">${ICON_CLOCK}</div>
-          <div style="font-size:20px; font-weight:800;">19.30 WIB</div>
+          <div style="font-size:20px; font-weight:800;">${escapeHTML(u.jam || '19.30 WIB')}</div>
         </div>
         <div style="display:flex; gap:14px; align-items:flex-start;">
           <div style="flex-shrink:0; margin-top:1px;">${ICON_PIN}</div>
-          <div style="font-size:20px; font-weight:800; line-height:1.35;">${escapeHTML(penyelenggara)} <span style="font-weight:600;">(Wonten Serambi Masjid At-Taqwa lama)</span></div>
+          <div style="font-size:20px; font-weight:800; line-height:1.35;">${escapeHTML(u.tempat || '-')}</div>
         </div>
       </div>
 
-      <div style="margin-top:34px; display:flex; align-items:flex-end; justify-content:space-between;">
+      ${u.catatan ? `<div style="margin-top:18px; font-size:14px; line-height:1.6; color:#4A3625; background:rgba(255,255,255,.35); border-radius:14px; padding:12px 16px;">📌 ${escapeHTML(u.catatan)}</div>` : ''}
+
+      <div style="margin-top:30px; display:flex; align-items:flex-end; justify-content:space-between;">
         <div style="font-family:'Playfair Display',serif; font-size:15px; line-height:1.6; color:#4A3625;">
-          Awit Kawigatosan Saha Rawuhipun<br>Katuraken matur nuwun
+          Atas perhatian dan kehadirannya<br>diucapkan terima kasih${u.penyelenggara ? `<br><span style="font-weight:700;">${escapeHTML(u.penyelenggara)}</span>` : ''}
         </div>
         <div style="flex-shrink:0; margin-left:10px;">${COFFEE_CUP}</div>
       </div>
@@ -1331,23 +1558,32 @@ function escapeHTML(s){
 }
 
 function generateUndangan(){
+  const jenis = document.getElementById('u-jenis').value;
+  const isCaos = jenis==='caos_pemut';
   const tglVal = document.getElementById('u-tanggal').value;
   const peny = document.getElementById('u-penyelenggara').value.trim();
+  const judul = document.getElementById('u-judul').value.trim();
+  const jam = document.getElementById('u-jam').value.trim();
+  const tempat = document.getElementById('u-tempat').value.trim();
+  const catatan = document.getElementById('u-catatan').value.trim();
   if(!tglVal){ toast('Pilih tanggal dulu'); return; }
-  if(!peny){ toast('Isi nama penyelenggara'); return; }
+  if(isCaos && !peny){ toast('Isi nama penyelenggara'); return; }
+  if(!isCaos && !judul){ toast('Isi judul acara dulu'); return; }
+  if(!isCaos && !tempat){ toast('Isi tempat acara dulu'); return; }
   const tanggalDate = new Date(tglVal+'T00:00:00');
   const pasaran = pasaranOf(tanggalDate);
 
+  const data = { jenis, tanggalAcara: tanggalDate.toISOString(), penyelenggara: peny, pasaran, judul, jam, tempat, catatan };
   let record;
   if(editingUndanganId){
     record = STATE.undangan.find(x=>x.id===editingUndanganId);
-    Object.assign(record, { tanggalAcara: tanggalDate.toISOString(), penyelenggara: peny, pasaran });
+    Object.assign(record, data);
   } else {
-    record = { id: uid(), tgl: new Date().toISOString(), tanggalAcara: tanggalDate.toISOString(), penyelenggara: peny, pasaran };
+    record = { id: uid(), tgl: new Date().toISOString(), ...data };
     STATE.undangan.unshift(record);
   }
   saveState();
-  renderUndanganPreview(tanggalDate, peny, pasaran);
+  renderUndanganPreview(record);
   closeSheet('sheet-buat-undangan');
   openSheet('sheet-undangan-preview');
   renderUndanganList();
@@ -1355,11 +1591,11 @@ function generateUndangan(){
 function reopenUndangan(id){
   const u = STATE.undangan.find(x=>x.id===id);
   if(!u) return;
-  renderUndanganPreview(new Date(u.tanggalAcara), u.penyelenggara, u.pasaran);
+  renderUndanganPreview(u);
   openSheet('sheet-undangan-preview');
 }
-function renderUndanganPreview(tanggalDate, penyelenggara, pasaran){
-  document.getElementById('undangan-canvas-wrap').innerHTML = buildUndanganHTML(tanggalDate, penyelenggara, pasaran);
+function renderUndanganPreview(u){
+  document.getElementById('undangan-canvas-wrap').innerHTML = buildUndanganHTML(u);
 }
 async function renderUndanganToCanvas(){
   if(document.fonts && document.fonts.ready){ try{ await document.fonts.ready; }catch(e){} }
