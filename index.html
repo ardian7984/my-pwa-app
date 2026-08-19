@@ -1471,18 +1471,43 @@ function generateSurat(){
   openSheet('sheet-preview');
   renderSuratList();
 }
-function printSurat(){
-  const content = document.getElementById('letter-content').innerHTML;
-  const w = window.open('','_blank');
-  w.document.write(`<html><head><title>Surat Pengantar</title><style>
+/* Cetak lewat iframe tersembunyi (BUKAN window.open) supaya tidak diblokir
+   saat aplikasi sudah di-install sebagai PWA di HP (mode standalone sering
+   memblokir/menggagalkan window.open, sehingga tombol cetak jadi error). */
+function printHTMLContent(title, content){
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(`<html><head><title>${title}</title><style>
     body{font-family:Arial,sans-serif;font-size:13px;line-height:1.6;padding:40px;color:#111;}
     table td{padding:2px 0; vertical-align:top;}
     .letter-kop{display:flex;align-items:center;gap:14px;text-align:center;border-bottom:3px double #111;padding-bottom:10px;margin-bottom:16px;}
     .rt-name{font-weight:700;font-size:16px;margin:0;}
     .rt-addr{font-size:11.5px;margin:2px 0 0;}
   </style></head><body>${content}</body></html>`);
-  w.document.close();
-  setTimeout(()=>w.print(), 300);
+  doc.close();
+  const cleanup = () => setTimeout(()=>{ if(iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 500);
+  iframe.onload = () => {
+    try{
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }catch(e){
+      console.error('Print gagal', e);
+      toast('Gagal membuka pratinjau cetak. Coba lagi, atau simpan sebagai gambar.');
+    }
+    cleanup();
+  };
+}
+function printSurat(){
+  const content = document.getElementById('letter-content').innerHTML;
+  printHTMLContent('Surat Pengantar', content);
 }
 function renderSuratList(){
   const el = document.getElementById('surat-list');
@@ -1819,16 +1844,7 @@ function kirimLampiran2WA(){
 }
 function printSuratUndangan(){
   const content = document.getElementById('undangan-letter-wrap').innerHTML;
-  const w = window.open('','_blank');
-  w.document.write(`<html><head><title>Surat Undangan</title><style>
-    body{font-family:Arial,sans-serif;font-size:13px;line-height:1.6;padding:40px;color:#111;}
-    table td{padding:2px 0; vertical-align:top;}
-    .letter-kop{display:flex;align-items:center;gap:14px;text-align:center;border-bottom:3px double #111;padding-bottom:10px;margin-bottom:16px;}
-    .rt-name{font-weight:700;font-size:16px;margin:0;}
-    .rt-addr{font-size:11.5px;margin:2px 0 0;}
-  </style></head><body>${content}</body></html>`);
-  w.document.close();
-  setTimeout(()=>w.print(), 300);
+  printHTMLContent('Surat Undangan', content);
 }
 
 function generateUndangan(){
