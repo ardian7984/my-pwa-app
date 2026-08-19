@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aplikasi-rt-cache-v1';
+const CACHE_NAME = 'aplikasi-rt-cache-v2';
 const APP_SHELL = [
   './index.html',
   './manifest.json',
