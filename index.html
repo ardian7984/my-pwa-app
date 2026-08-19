@@ -405,6 +405,18 @@
     <div style="margin-top:20px;">
       <button class="btn btn-primary" onclick="saveProfil()">Simpan pengaturan</button>
     </div>
+
+    <div class="section-title" style="margin-top:24px;">Sinkronisasi data bersama (Google Sheets)</div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Supaya semua pengurus RT melihat data yang sama. Lihat panduan setup di file Code.gs yang diberikan.</p>
+    <label>URL Web App (dari Google Apps Script)</label>
+    <input id="sync-url" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+    <label>Kata sandi sinkronisasi (token)</label>
+    <input id="sync-token" placeholder="kata sandi rahasia" type="password">
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="saveSyncConfig()">Simpan &amp; sinkronkan</button>
+      <button class="btn" onclick="pullFromServer(false)">Sinkronkan sekarang</button>
+    </div>
+    <div id="sync-status" style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);">Belum disinkronkan</div>
   </div>
 </div>
 
@@ -695,6 +707,106 @@ function saveState(){
   }, 200);
 }
 
+/* ============ SINKRONISASI (database bersama via Google Sheets) ============
+   Setiap perubahan (tambah/edit/hapus warga, iuran, surat, undangan, profil)
+   dikirim ke Google Apps Script Web App lalu disimpan di Google Sheets.
+   Data terbaru dari pengurus lain ditarik ulang secara berkala supaya semua
+   HP melihat data yang sama. Kalau offline, perubahan diantre dan dikirim
+   otomatis begitu koneksi kembali — jadi tetap bisa dipakai tanpa internet. */
+const SYNC_CFG_KEY = 'rt-app-sync-cfg';
+let SYNC_CFG = { url:'', token:'' };
+try{
+  const rawCfg = localStorage.getItem(SYNC_CFG_KEY);
+  if(rawCfg) SYNC_CFG = Object.assign(SYNC_CFG, JSON.parse(rawCfg));
+}catch(e){}
+
+const SYNC_QUEUE_KEY = 'rt-app-sync-queue';
+function loadSyncQueue(){ try{ return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)) || []; }catch(e){ return []; } }
+function saveSyncQueue(q){ localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q)); }
+function syncConfigured(){ return !!(SYNC_CFG.url && SYNC_CFG.token); }
+function setSyncStatus(text){ const el=document.getElementById('sync-status'); if(el) el.textContent = text; }
+
+function queuePush(entity, op, record){
+  if(!syncConfigured()) return;
+  const q = loadSyncQueue();
+  q.push({ entity, op, record });
+  saveSyncQueue(q);
+  flushSyncQueue();
+}
+
+let syncFlushing = false;
+async function flushSyncQueue(){
+  if(syncFlushing || !syncConfigured()) return;
+  let q = loadSyncQueue();
+  if(q.length === 0) return;
+  syncFlushing = true;
+  setSyncStatus('Menyinkronkan '+q.length+' perubahan...');
+  while(q.length){
+    const item = q[0];
+    try{
+      const res = await fetch(SYNC_CFG.url, {
+        method:'POST',
+        headers: {'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ token: SYNC_CFG.token, entity: item.entity, op: item.op, record: item.record })
+      });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.error || 'Server menolak data');
+      q.shift();
+      saveSyncQueue(q);
+    }catch(err){
+      console.log('Sinkronisasi gagal, dicoba lagi nanti:', err);
+      break;
+    }
+  }
+  syncFlushing = false;
+  const remain = loadSyncQueue().length;
+  setSyncStatus(remain>0
+    ? (remain+' perubahan menunggu koneksi internet')
+    : ('Tersinkron pukul '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})));
+}
+
+async function pullFromServer(silent){
+  if(!syncConfigured()) return;
+  if(loadSyncQueue().length>0){
+    await flushSyncQueue();
+    if(loadSyncQueue().length>0) return; // masih ada yg blm terkirim, jangan timpa data lokal dulu
+  }
+  try{
+    if(!silent) setSyncStatus('Mengambil data terbaru dari pengurus lain...');
+    const res = await fetch(SYNC_CFG.url+'?action=pullAll&token='+encodeURIComponent(SYNC_CFG.token));
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Gagal mengambil data');
+    if(data.profil) STATE.profil = Object.assign({}, STATE.profil, data.profil);
+    STATE.warga = data.warga || [];
+    STATE.iuran = data.iuran || {};
+    STATE.surat = data.surat || [];
+    STATE.undangan = data.undangan || [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+    render();
+    setSyncStatus('Tersinkron pukul '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}));
+  }catch(err){
+    console.log('Gagal ambil data terbaru (mungkin offline):', err);
+    setSyncStatus('Offline — memakai data tersimpan di HP ini');
+  }
+}
+
+function openSyncSettings(){
+  const u = document.getElementById('sync-url'); if(u) u.value = SYNC_CFG.url||'';
+  const t = document.getElementById('sync-token'); if(t) t.value = SYNC_CFG.token||'';
+}
+function saveSyncConfig(){
+  const url = document.getElementById('sync-url').value.trim();
+  const token = document.getElementById('sync-token').value.trim();
+  SYNC_CFG = { url, token };
+  localStorage.setItem(SYNC_CFG_KEY, JSON.stringify(SYNC_CFG));
+  toast('Pengaturan sinkronisasi disimpan');
+  pullFromServer(false);
+}
+
+window.addEventListener('online', ()=>flushSyncQueue());
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') pullFromServer(true); });
+setInterval(()=>pullFromServer(true), 25000);
+
 /* ============ NAV ============ */
 function goto(view){
   currentView = view;
@@ -739,6 +851,7 @@ function openProfil(){
   document.getElementById('p-alamat-surat').value = STATE.profil.alamatSurat||'';
   document.getElementById('p-telp-surat').value = STATE.profil.telpSurat||'';
   document.getElementById('p-aksara-jawa').value = STATE.profil.aksaraJawa||'';
+  openSyncSettings();
   openSheet('sheet-profil');
 }
 function saveProfil(){
@@ -756,6 +869,7 @@ function saveProfil(){
     aksaraJawa: document.getElementById('p-aksara-jawa').value
   };
   saveState();
+  queuePush('profil','upsert', STATE.profil);
   closeSheet('sheet-profil');
   document.getElementById('tb-eyebrow').textContent = 'Aplikasi RT';
   toast('Pengaturan disimpan');
@@ -958,6 +1072,7 @@ function saveWarga(){
     STATE.warga.push(wargaObj);
   }
   saveState();
+  queuePush('warga','upsert', wargaObj);
   closeSheet('sheet-form');
   toast('Data warga tersimpan');
   renderWargaList(); renderDashboard();
@@ -1026,6 +1141,7 @@ function deleteWarga(id){
   STATE.warga = STATE.warga.filter(w=>w.id!==id);
   Object.keys(STATE.iuran).forEach(m=>{ delete STATE.iuran[m][id]; });
   saveState();
+  queuePush('warga','delete', {id});
   closeSheet('sheet-detail');
   toast('Data warga dihapus');
   renderWargaList(); renderIuranList(); renderDashboard();
@@ -1053,6 +1169,7 @@ function toggleLunas(id){
   if(!STATE.iuran[currentBulan]) STATE.iuran[currentBulan] = {};
   STATE.iuran[currentBulan][id] = !STATE.iuran[currentBulan][id];
   saveState();
+  queuePush('iuran','upsert', { bulan: currentBulan, wargaId: id, lunas: STATE.iuran[currentBulan][id] });
   renderIuranList(); renderDashboard();
 }
 function renderIuranList(){
@@ -1282,6 +1399,7 @@ function deleteSurat(id){
   if(!confirm('Hapus surat ini dari riwayat?')) return;
   STATE.surat = STATE.surat.filter(s=>s.id!==id);
   saveState();
+  queuePush('surat','delete', {id});
   toast('Surat dihapus');
   renderSuratList();
 }
@@ -1301,28 +1419,23 @@ function romanMonth(m){
 function buildSuratHTML(s){
   const tglIndo = new Date(s.tgl).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
   const tglLahirIndo = s.tgllahir ? new Date(s.tgllahir+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-';
+  const namaSingkat = STATE.profil.namaSingkat || 'RT 01';
   return `
-    <div class="letter-kop" style="display:flex;align-items:center;gap:14px;text-align:left;">
-      <img src="${LOGO_SRC}" style="width:56px;height:56px;border-radius:50%;flex-shrink:0;">
-      <div>
-        <p class="rt-name">PENGURUS ${STATE.profil.nama.toUpperCase()}</p>
-        <p class="rt-addr">Kelurahan ${STATE.profil.kelurahan||'-'}, Kecamatan ${STATE.profil.kecamatan||'-'}, ${STATE.profil.kabupaten||'-'}</p>
-      </div>
-    </div>
-    <p style="text-align:center;font-weight:700;text-decoration:underline;margin:0 0 2px;">SURAT PENGANTAR</p>
-    <p style="text-align:center;margin:0 0 16px;">Nomor: ${s.nomor}</p>
-    <p>Yang bertanda tangan di bawah ini, Ketua ${STATE.profil.nama}${STATE.profil.ketua? (', '+STATE.profil.ketua):''}, dengan ini menerangkan bahwa:</p>
+    ${buildKopSuratOfficial()}
+    <p style="text-align:center;font-weight:700;text-decoration:underline;margin:16px 0 2px;">SURAT PENGANTAR</p>
+    <p style="text-align:center;margin:0 0 16px;">Nomor: ${escapeHTML(s.nomor)}</p>
+    <p>Yang bertanda tangan di bawah ini, Ketua ${escapeHTML(namaSingkat)}${STATE.profil.ketua? (', '+escapeHTML(STATE.profil.ketua)):''}, dengan ini menerangkan bahwa:</p>
     <table style="width:100%;margin:10px 0 16px;">
-      <tr><td style="width:130px;">Nama</td><td>: ${s.nama}</td></tr>
-      <tr><td>NIK</td><td>: ${s.nik||'-'}</td></tr>
-      <tr><td>Tempat, Tgl Lahir</td><td>: ${s.tempat||'-'}, ${tglLahirIndo}</td></tr>
-      <tr><td>Pekerjaan</td><td>: ${s.pekerjaan||'-'}</td></tr>
-      <tr><td>Alamat</td><td>: ${s.alamat||'-'}</td></tr>
+      <tr><td style="width:130px;">Nama</td><td>: ${escapeHTML(s.nama)}</td></tr>
+      <tr><td>NIK</td><td>: ${escapeHTML(s.nik)||'-'}</td></tr>
+      <tr><td>Tempat, Tgl Lahir</td><td>: ${escapeHTML(s.tempat)||'-'}, ${tglLahirIndo}</td></tr>
+      <tr><td>Pekerjaan</td><td>: ${escapeHTML(s.pekerjaan)||'-'}</td></tr>
+      <tr><td>Alamat</td><td>: ${escapeHTML(s.alamat)||'-'}</td></tr>
     </table>
-    <p>Benar merupakan warga yang berdomisili di wilayah ${STATE.profil.nama}. Surat pengantar ini dibuat untuk keperluan <b>${s.keperluan}</b>.</p>
+    <p>Benar merupakan warga yang berdomisili di wilayah ${escapeHTML(namaSingkat)}. Surat pengantar ini dibuat untuk keperluan <b>${escapeHTML(s.keperluan)}</b>.</p>
     <p>Demikian surat pengantar ini dibuat untuk dapat dipergunakan sebagaimana mestinya.</p>
-    <p style="margin-top:26px;">${STATE.profil.kelurahan||'........................'}, ${tglIndo}<br>Ketua ${STATE.profil.nama}</p>
-    <p style="margin-top:60px; font-weight:700; text-decoration:underline;">${STATE.profil.ketua||'( ......................... )'}</p>
+    <p style="margin-top:26px;">${escapeHTML(STATE.profil.kelurahan)||'........................'}, ${tglIndo}<br>Ketua ${escapeHTML(namaSingkat)}</p>
+    <p style="margin-top:60px; font-weight:700; text-decoration:underline;">${escapeHTML(STATE.profil.ketua)||'( ......................... )'}</p>
   `;
 }
 function generateSurat(){
@@ -1345,11 +1458,13 @@ function generateSurat(){
   } else {
     const now = new Date();
     const nomorUrut = (STATE.surat.length+1).toString().padStart(3,'0');
-    const nomor = `${nomorUrut}/${STATE.profil.nama.replace(/\s+/g,'')}/${romanMonth(now.getMonth())}/${now.getFullYear()}`;
+    const kode = (STATE.profil.namaSingkat||'RT01').replace(/\s+/g,'');
+    const nomor = `${nomorUrut}/SP-${kode}/${romanMonth(now.getMonth())}/${now.getFullYear()}`;
     record = Object.assign({id:uid(), tgl:now.toISOString(), nomor}, fields);
     STATE.surat.unshift(record);
   }
   saveState();
+  queuePush('surat','upsert', record);
 
   document.getElementById('letter-content').innerHTML = buildSuratHTML(record);
   closeSheet('sheet-surat');
@@ -1362,7 +1477,7 @@ function printSurat(){
   w.document.write(`<html><head><title>Surat Pengantar</title><style>
     body{font-family:Arial,sans-serif;font-size:13px;line-height:1.6;padding:40px;color:#111;}
     table td{padding:2px 0; vertical-align:top;}
-    .letter-kop{display:flex;align-items:center;gap:14px;text-align:left;border-bottom:3px double #111;padding-bottom:10px;margin-bottom:16px;}
+    .letter-kop{display:flex;align-items:center;gap:14px;text-align:center;border-bottom:3px double #111;padding-bottom:10px;margin-bottom:16px;}
     .rt-name{font-weight:700;font-size:16px;margin:0;}
     .rt-addr{font-size:11.5px;margin:2px 0 0;}
   </style></head><body>${content}</body></html>`);
@@ -1471,6 +1586,7 @@ function deleteUndangan(id){
   if(!confirm('Hapus undangan ini dari riwayat?')) return;
   STATE.undangan = STATE.undangan.filter(u=>u.id!==id);
   saveState();
+  queuePush('undangan','delete', {id});
   toast('Undangan dihapus');
   renderUndanganList();
 }
@@ -1743,6 +1859,7 @@ function generateUndangan(){
     STATE.undangan.unshift(record);
   }
   saveState();
+  queuePush('undangan','upsert', record);
   renderUndanganPreview(record);
   closeSheet('sheet-buat-undangan');
   openSheet('sheet-undangan-preview');
@@ -1820,11 +1937,41 @@ function render(){
 
 /* ============ INIT ============ */
 loadState();
+pullFromServer(true);
 
-/* ============ PWA: SERVICE WORKER (install & offline) ============ */
+/* ============ PWA: SERVICE WORKER (install, offline & auto-update) ============ */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js').catch(err=>console.log('SW gagal daftar (ok jika dibuka langsung tanpa hosting):', err));
+    navigator.serviceWorker.register('sw.js').then((reg)=>{
+
+      // Cek ada versi baru setiap kali app dibuka / dibawa ke depan lagi
+      reg.update();
+      document.addEventListener('visibilitychange', ()=>{
+        if(document.visibilityState === 'visible') reg.update();
+      });
+
+      // Kalau ketemu SW baru, minta dia langsung aktif
+      reg.addEventListener('updatefound', ()=>{
+        const newWorker = reg.installing;
+        if(!newWorker) return;
+        newWorker.addEventListener('statechange', ()=>{
+          if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
+            newWorker.postMessage('SKIP_WAITING');
+          }
+        });
+      });
+
+    }).catch(err=>console.log('SW gagal daftar (ok jika dibuka langsung tanpa hosting):', err));
+
+    // Begitu SW baru resmi mengambil alih, reload halaman otomatis
+    // supaya pengguna langsung dapat versi terbaru tanpa hapus/instal ulang app.
+    let refreshingAfterUpdate = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(refreshingAfterUpdate) return;
+      refreshingAfterUpdate = true;
+      toast('Memperbarui aplikasi ke versi terbaru...');
+      setTimeout(()=> window.location.reload(), 800);
+    });
   });
 }
 </script>
