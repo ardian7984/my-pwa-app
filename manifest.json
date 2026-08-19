@@ -1,0 +1,17 @@
+{
+  "name": "Aplikasi RT 01 Jeruk, Kepek",
+  "short_name": "Aplikasi RT",
+  "description": "Aplikasi pengurus RT: data warga, iuran, surat pengantar, dan undangan kumpulan selapanan.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F6F1",
+  "theme_color": "#1F4D38",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
