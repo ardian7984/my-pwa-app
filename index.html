@@ -1215,10 +1215,10 @@ function parseKKText(text){
   return { no_kk, kepala_keluarga, alamat, anggota: dedup.slice(0,12) };
 }
 function cleanField(s){
-  return (s||'').replace(/[|:_]+/g,' ').replace(/\s{2,}/g,' ').trim();
+  return String(s||'').replace(/[|:_]+/g,' ').replace(/\s{2,}/g,' ').trim();
 }
 function toTitleCase(s){
-  return (s||'').toLowerCase().replace(/\b\w/g, c=>c.toUpperCase()).replace(/\bSe\b|\bS\.pd\b/gi, m=>m.toUpperCase());
+  return String(s||'').toLowerCase().replace(/\b\w/g, c=>c.toUpperCase()).replace(/\bSe\b|\bS\.pd\b/gi, m=>m.toUpperCase());
 }
 
 /* ============ SAVE WARGA (manual/edit) ============ */
@@ -1398,7 +1398,7 @@ function openWA(url){
 function waReminder(id){
   const w = STATE.warga.find(x=>x.id===id);
   if(!w) return;
-  const nomor = (w.wa||'').replace(/[^0-9]/g,'');
+  const nomor = String(w.wa||'').replace(/[^0-9]/g,'');
   const nominal = w.iuran || STATE.profil.iuranDefault || 0;
   const msg = `Assalamualaikum Bapak/Ibu ${w.kepala}, mengingatkan iuran warga bulan ${monthLabel(currentBulan)} sebesar ${rupiah(nominal)} belum tercatat lunas. Mohon konfirmasi jika sudah transfer ya. Terima kasih 🙏 - Pengurus ${STATE.profil.nama}`;
   const url = nomor ? `https://wa.me/${nomor}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
@@ -1494,7 +1494,7 @@ function setGolDarahFilter(f){
   document.querySelectorAll('#gd-filter button').forEach(b=>b.classList.toggle('active', b.textContent.trim()===(f==='semua'?'Semua':f)));
   renderGolDarahList();
 }
-function golDarahBase(v){ return (v||'').replace(/[+-]/g,''); }
+function golDarahBase(v){ return String(v||'').replace(/[+-]/g,''); }
 function renderGolDarahList(){
   const hasil = [];
   STATE.warga.forEach(w=>{
@@ -1941,7 +1941,8 @@ function buildUndanganHTML(u){
   }
 }
 function escapeHTML(s){
-  return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  s = (s===null || s===undefined) ? '' : String(s);
+  return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 /* ============ SURAT UNDANGAN RESMI (kop surat, aksara Jawa) + LAMPIRAN 2 (teks WA) ============
