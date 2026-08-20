@@ -906,6 +906,30 @@ function toast(msg){
   document.body.appendChild(t);
   setTimeout(()=>t.remove(),2600);
 }
+/* Toast error yang tampil lebih lama & mencolok — supaya kalau ada error nyata
+   saat klik tombol (mis. Lihat), pesannya kelihatan jelas dan bisa dilaporkan
+   balik, bukan cuma "diam saja tidak terjadi apa-apa". */
+function errorToast(msg){
+  const t=document.createElement('div');
+  t.className='toast';
+  t.style.background = '#B3261E';
+  t.style.maxWidth = '92vw';
+  t.style.whiteSpace = 'pre-wrap';
+  t.style.textAlign = 'left';
+  t.style.zIndex = '999';
+  t.textContent = '⚠️ Error: ' + msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 10000);
+}
+window.addEventListener('error', function(e){
+  console.error('Uncaught error:', e.error || e.message);
+  errorToast((e.error && e.error.message) || e.message || 'kesalahan tidak diketahui');
+});
+window.addEventListener('unhandledrejection', function(e){
+  console.error('Unhandled promise rejection:', e.reason);
+  const m = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+  errorToast(m);
+});
 
 /* ============ PROFIL ============ */
 function openProfil(){
@@ -1693,10 +1717,15 @@ function renderSuratList(){
   `).join('');
 }
 function viewSurat(id){
-  const s = STATE.surat.find(x=>x.id===id);
-  if(!s) return;
-  document.getElementById('letter-content').innerHTML = buildSuratHTML(s);
-  openSheet('sheet-preview');
+  try{
+    const s = STATE.surat.find(x=>x.id===id);
+    if(!s){ toast('Data surat tidak ditemukan (mungkin baru saja terhapus/tersinkron)'); return; }
+    document.getElementById('letter-content').innerHTML = buildSuratHTML(s);
+    openSheet('sheet-preview');
+  }catch(err){
+    console.error('viewSurat gagal:', err);
+    errorToast('Gagal membuka surat: ' + err.message);
+  }
 }
 
 /* ============ UNDANGAN KUMPULAN ============ */
@@ -2043,10 +2072,15 @@ function generateUndangan(){
   renderUndanganList();
 }
 function reopenUndangan(id){
-  const u = STATE.undangan.find(x=>x.id===id);
-  if(!u) return;
-  renderUndanganPreview(u);
-  openSheet('sheet-undangan-preview');
+  try{
+    const u = STATE.undangan.find(x=>x.id===id);
+    if(!u){ toast('Data undangan tidak ditemukan (mungkin baru saja terhapus/tersinkron)'); return; }
+    renderUndanganPreview(u);
+    openSheet('sheet-undangan-preview');
+  }catch(err){
+    console.error('reopenUndangan gagal:', err);
+    errorToast('Gagal membuka undangan: ' + err.message);
+  }
 }
 function renderUndanganPreview(u){
   const jenis = u.jenis || 'caos_pemut';
