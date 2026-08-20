@@ -1884,61 +1884,27 @@ const COFFEE_CUP = `<svg width="92" height="92" viewBox="0 0 100 110" fill="none
 </svg>`;
 
 function buildUndanganHTML(u){
-  // Poster dekoratif ini hanya dipakai untuk jenis Caos Pemut.
-  // Jenis undangan lain (Rapat, Kerja Bakti, Pengajian/Tahlilan/Yasinan, Tilikan, Lainnya)
-  // memakai surat resmi berkop surat — lihat buildSuratUndanganHTML().
+  // Poster ini pakai GAMBAR TEMPLATE ASLI (undangan-template.jpg) supaya desainnya
+  // identik dengan referensi — ornamen sudut, kop RT, kotak border, ikon, dan
+  // cangkir kopi semuanya bagian dari gambar. Hanya tanggal & nama penyelenggara
+  // yang ditimpakan sebagai teks hidup di posisi yang sudah dipetakan presisi.
+  // Jam (19.30 WIB) & lokasi (Wonten Serambi Masjid At-Taqwa lama) sudah baku,
+  // jadi ikut tercetak sebagai bagian dari gambar template.
   const tanggalDate = new Date(u.tanggalAcara);
-  const namaSingkat = STATE.profil.namaSingkat || 'RT 01';
-  {
-    return `
-    <div class="undangan-sheet" style="width:100%;aspect-ratio:1000/1414;position:relative;overflow:hidden;box-sizing:border-box;
-      background:
-        radial-gradient(circle at 15% 20%, rgba(107,74,46,.05), transparent 40%),
-        radial-gradient(circle at 85% 75%, rgba(107,74,46,.06), transparent 45%),
-        radial-gradient(circle at 50% 50%, rgba(107,74,46,.03), transparent 60%),
-        linear-gradient(160deg,#F1E6CC,#E7D5AC 45%,#DFC896 100%);
-      font-family:'Nunito',sans-serif; color:#3A2A1E;">
-      <div style="position:absolute; inset:16px; border:2px solid #6B4A2E; opacity:.5;"></div>
-      <div style="position:absolute; inset:24px; border:1px solid #6B4A2E; opacity:.3;"></div>
-      <div style="position:absolute; top:10px; left:10px; width:78px; height:78px;">${CORNER_FLOURISH}</div>
-      <div style="position:absolute; top:10px; right:10px; width:78px; height:78px; transform:scaleX(-1);">${CORNER_FLOURISH}</div>
-      <div style="position:absolute; bottom:10px; left:10px; width:78px; height:78px; transform:scaleY(-1);">${CORNER_FLOURISH}</div>
-      <div style="position:absolute; bottom:10px; right:10px; width:78px; height:78px; transform:scale(-1,-1);">${CORNER_FLOURISH}</div>
-
-      <div style="position:relative; padding:9% 9% 6%;">
-        <div style="display:flex; align-items:center; gap:16px; margin-bottom:22px;">
-          <img src="${LOGO_SRC}" style="width:74px;height:74px;border-radius:50%;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.22);">
-          <div style="font-family:'Playfair Display',serif; font-size:38px; font-weight:700;">Caos Pemut</div>
-        </div>
-
-        <div style="text-align:center; font-size:18px; line-height:1.6; margin:0 2% 24px; color:#4A3625; font-weight:600;">
-          bilih pepanggihan rutin malam Minggu Legi <span style="white-space:nowrap;">${namaSingkat}</span>, badhe kalaksanan mbenjang:
-        </div>
-
-        <div style="border:2.5px solid #4A3625; border-radius:20px; padding:24px 20px;">
-          <div style="display:flex; gap:14px; align-items:center; margin-bottom:18px;">
-            <div style="flex-shrink:0;">${ICON_CALENDAR}</div>
-            <div style="font-size:20px; font-weight:800; line-height:1.3;">${fmtTanggalIndo(tanggalDate)}</div>
-          </div>
-          <div style="display:flex; gap:14px; align-items:center; margin-bottom:18px;">
-            <div style="flex-shrink:0;">${ICON_CLOCK}</div>
-            <div style="font-size:20px; font-weight:800;">19.30 WIB</div>
-          </div>
-          <div style="display:flex; gap:14px; align-items:flex-start;">
-            <div style="flex-shrink:0; margin-top:1px;">${ICON_PIN}</div>
-            <div style="font-size:20px; font-weight:800; line-height:1.35;">${escapeHTML(u.penyelenggara||'')} <span style="font-weight:600;">(Wonten Serambi Masjid At-Taqwa lama)</span></div>
-          </div>
-        </div>
-
-        <div style="margin-top:34px; display:flex; align-items:flex-end; justify-content:space-between;">
-          <div style="font-family:'Playfair Display',serif; font-size:15px; line-height:1.6; color:#4A3625;">
-            Awit Kawigatosan Saha Rawuhipun<br>Katuraken matur nuwun
-          </div>
-          <div style="flex-shrink:0; margin-left:10px;">${COFFEE_CUP}</div>
-        </div>
+  const hariArr = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const bulanArr = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
+  const hariNama = hariArr[tanggalDate.getDay()];
+  const tglAngka = `${tanggalDate.getDate()} ${bulanArr[tanggalDate.getMonth()]} ${tanggalDate.getFullYear()}`;
+  return `
+    <div class="undangan-sheet" style="width:100%;aspect-ratio:1414/2000;position:relative;overflow:hidden;box-sizing:border-box;">
+      <img src="undangan-template.jpg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;">
+      <div style="position:absolute; left:37.4%; width:47.5%; top:37.2%; font-family:'Nunito',sans-serif; font-weight:800; font-size:26px; line-height:1.32; color:#241a10;">
+        ${escapeHTML(hariNama)},<br>${escapeHTML(tglAngka)}
+      </div>
+      <div style="position:absolute; left:37.4%; width:47.5%; top:56%; font-family:'Nunito',sans-serif; font-weight:800; font-size:26px; line-height:1.32; color:#241a10;">
+        ${escapeHTML(u.penyelenggara||'')}
       </div>
     </div>`;
-  }
 }
 function escapeHTML(s){
   s = (s===null || s===undefined) ? '' : String(s);

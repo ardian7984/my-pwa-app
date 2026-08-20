@@ -3,13 +3,14 @@
    perubahan kode ke GitHub. Ini yang memicu HP pengguna membuang cache
    lama dan mengambil file baru.
    ===================================================================== */
-const CACHE_NAME = 'aplikasi-rt-cache-v11';
+const CACHE_NAME = 'aplikasi-rt-cache-v14';
 
 const APP_SHELL = [
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './undangan-template.jpg'
 ];
 
 self.addEventListener('install', (event) => {
