@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -428,10 +429,10 @@
     <div class="scan-box" id="scan-box" onclick="document.getElementById('kk-file').click()">
       <div id="scanline-holder"></div>
       <div class="picon">🤖📷</div>
-      <h3>Foto KK pakai AI</h3>
-      <p>Data otomatis terisi dalam ~10 detik</p>
+      <h3>Foto atau PDF KK pakai AI</h3>
+      <p>Data otomatis terisi — bisa foto/JPG atau file PDF hasil scan/download Dukcapil</p>
     </div>
-    <input type="file" id="kk-file" accept="image/*" capture="environment" style="display:none" onchange="handleKKUpload(event)">
+    <input type="file" id="kk-file" accept="image/*,application/pdf" style="display:none" onchange="handleKKUpload(event)">
     <div style="text-align:center; margin:14px 0; color:var(--ink-soft); font-size:12.5px;">atau isi manual</div>
     <button class="btn btn-outline" onclick="openManualForm()">✍️ Isi data manual</button>
   </div>
@@ -443,7 +444,7 @@
     <div class="sheet-handle"></div>
     <div class="sheet-header"><div class="sheet-title" id="form-title">Data warga</div><button class="icon-btn" onclick="closeSheet('sheet-form')">✕</button></div>
     <img id="form-kk-preview" class="kk-preview" style="display:none;">
-    <input type="file" id="kk-file-retake" accept="image/*" capture="environment" style="display:none" onchange="handleKKUpload(event)">
+    <input type="file" id="kk-file-retake" accept="image/*,application/pdf" style="display:none" onchange="handleKKUpload(event)">
     <button id="btn-retake-kk" class="btn btn-outline" style="display:none;margin-bottom:14px;" onclick="document.getElementById('kk-file-retake').click()">🔄 Foto ulang KK</button>
     <div id="scan-warning" style="display:none;background:#FFF3E0;border:1px solid #F5C77E;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#7A4A00;margin-bottom:14px;">⚠️ Hasil baca otomatis kadang meleset (terutama No. KK &amp; NIK). Mohon cek ulang tiap angka dengan teliti sebelum menyimpan.</div>
     <label>No. Kartu Keluarga</label>
@@ -782,7 +783,7 @@ async function pullFromServer(silent){
     STATE.surat = data.surat || [];
     STATE.undangan = data.undangan || [];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
-    render();
+    safeRender();
     setSyncStatus('Tersinkron pukul '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}));
   }catch(err){
     console.log('Gagal ambil data terbaru (mungkin offline):', err);
@@ -806,6 +807,20 @@ function saveSyncConfig(){
 window.addEventListener('online', ()=>flushSyncQueue());
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') pullFromServer(true); });
 setInterval(()=>pullFromServer(true), 25000);
+
+/* Cegah render ulang daftar (Surat/Undangan/Warga/dll) terjadi TEPAT saat jari
+   masih menyentuh layar. Tanpa ini, sinkronisasi otomatis di latar belakang bisa
+   mengganti tombol "Lihat" persis saat diketuk di HP, sehingga ketukan hilang
+   begitu saja (tombol lama sudah diganti tombol baru sebelum sempat ter-klik).
+   Render ditunda sampai jari diangkat (touchend), baru dijalankan. */
+let touchBusy = false;
+document.addEventListener('touchstart', ()=>{ touchBusy = true; }, {passive:true});
+document.addEventListener('touchend', ()=>{ touchBusy = false; }, {passive:true});
+document.addEventListener('touchcancel', ()=>{ touchBusy = false; }, {passive:true});
+function safeRender(){
+  if(touchBusy){ setTimeout(safeRender, 150); return; }
+  render();
+}
 
 /* ============ NAV ============ */
 function goto(view){
@@ -894,45 +909,111 @@ function openManualForm(){
   openSheet('sheet-form');
 }
 
+/* Ubah File (foto atau PDF) jadi data URL siap dipakai */
+function fileToDataUrl(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+/* Render halaman pertama PDF jadi gambar resolusi tinggi (pakai pdf.js) supaya
+   bisa dibaca OCR persis seperti kalau difoto. PDF KK dari Dukcapil biasanya
+   berupa hasil scan/gambar (bukan teks asli), jadi tetap lewat jalur OCR yang sama. */
+async function pdfFileToImageDataUrl(file){
+  const buf = await file.arrayBuffer();
+  if(window.pdfjsLib && !pdfjsLib.GlobalWorkerOptions.workerSrc){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 3 }); // render besar supaya tulisan tajam untuk OCR
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/png');
+}
+/* Perbesar gambar kecil + ubah ke hitam-putih dengan kontras yang ditinggikan.
+   Ini yang paling berpengaruh untuk foto HP yang buram/gelap/kurang tajam —
+   OCR jauh lebih akurat membaca teks kontras tinggi dibanding foto warna biasa. */
+function preprocessImageForOCR(dataUrl){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const MIN_W = 1900;
+      const scale = img.width < MIN_W ? Math.min(2.5, MIN_W / img.width) : 1;
+      const cw = Math.round(img.width * scale), ch = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = cw; canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, cw, ch);
+      try{
+        const imgData = ctx.getImageData(0, 0, cw, ch);
+        const d = imgData.data;
+        const gray = new Float32Array(cw*ch);
+        let min = 255, max = 0;
+        for(let i=0, p=0; i<d.length; i+=4, p++){
+          const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+          gray[p] = g;
+          if(g<min) min = g;
+          if(g>max) max = g;
+        }
+        const range = Math.max(1, max-min);
+        for(let i=0, p=0; i<d.length; i+=4, p++){
+          let v = ((gray[p]-min)/range) * 255;
+          v = Math.max(0, Math.min(255, (v-128)*1.35 + 128)); // tambah kontras
+          d[i] = d[i+1] = d[i+2] = v;
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }catch(e){ console.error('preprocess gagal, pakai gambar asli', e); }
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = ()=>resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 async function handleKKUpload(e){
   const file = e.target.files[0];
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = async function(ev){
-    pendingKKImage = ev.target.result;
-    closeSheet('sheet-tambah');
-    showScanProgress(0, 'Menyiapkan gambar...');
-    try{
-      const extracted = await scanKKWithOCR(pendingKKImage);
-      hideScanProgress();
-      editingWargaId = null;
-      document.getElementById('form-title').textContent = 'Konfirmasi data hasil scan';
-      document.getElementById('form-kk-preview').src = pendingKKImage;
-      document.getElementById('form-kk-preview').style.display='block';
-      document.getElementById('btn-retake-kk').style.display='block';
-      document.getElementById('scan-warning').style.display='block';
-      document.getElementById('f-nokk').value = extracted.no_kk||'';
-      document.getElementById('f-kepala').value = extracted.kepala_keluarga||'';
-      document.getElementById('f-alamat').value = extracted.alamat||'';
-      document.getElementById('f-blok').value = '';
-      document.getElementById('f-wa').value = '';
-      document.getElementById('f-iuran').value = '';
-      const anggotaText = (extracted.anggota||[]).map(a=>[a.nama||'',a.nik||'',a.status||''].join(', ')).join('\n');
-      document.getElementById('f-anggota').value = anggotaText;
-      openSheet('sheet-form');
-      if(extracted.anggota && extracted.anggota.length){
-        toast('✅ Sebagian data terbaca — cek & lengkapi dulu sebelum disimpan, terutama No. KK & NIK');
-      } else {
-        toast('⚠️ Tulisan sulit terbaca. Silakan lengkapi manual, atau coba foto ulang lebih terang & lurus.');
-      }
-    }catch(err){
-      console.error(err);
-      hideScanProgress();
-      toast('Gagal membaca foto KK. Coba foto lebih terang & lurus, atau isi manual.');
-      openManualForm();
+  closeSheet('sheet-tambah');
+  showScanProgress(0.02, 'Menyiapkan berkas...');
+  try{
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    pendingKKImage = isPdf ? await pdfFileToImageDataUrl(file) : await fileToDataUrl(file);
+    showScanProgress(0.08, 'Mempertajam gambar...');
+    const extracted = await scanKKWithOCR(pendingKKImage);
+    hideScanProgress();
+    editingWargaId = null;
+    document.getElementById('form-title').textContent = 'Konfirmasi data hasil scan';
+    document.getElementById('form-kk-preview').src = pendingKKImage;
+    document.getElementById('form-kk-preview').style.display='block';
+    document.getElementById('btn-retake-kk').style.display='block';
+    document.getElementById('scan-warning').style.display='block';
+    document.getElementById('f-nokk').value = extracted.no_kk||'';
+    document.getElementById('f-kepala').value = extracted.kepala_keluarga||'';
+    document.getElementById('f-alamat').value = extracted.alamat||'';
+    document.getElementById('f-blok').value = '';
+    document.getElementById('f-wa').value = '';
+    document.getElementById('f-iuran').value = '';
+    const anggotaText = (extracted.anggota||[]).map(a=>[a.nama||'',a.nik||'',a.status||''].join(', ')).join('\n');
+    document.getElementById('f-anggota').value = anggotaText;
+    openSheet('sheet-form');
+    if(extracted.anggota && extracted.anggota.length){
+      toast('✅ Sebagian data terbaca — cek & lengkapi dulu sebelum disimpan, terutama No. KK & NIK');
+    } else {
+      toast('⚠️ Tulisan sulit terbaca. Silakan lengkapi manual, atau coba foto ulang lebih terang & lurus.');
     }
-  };
-  reader.readAsDataURL(file);
+  }catch(err){
+    console.error(err);
+    hideScanProgress();
+    toast('Gagal membaca berkas KK. Coba foto lebih terang & lurus, pakai PDF hasil download resmi, atau isi manual.');
+    openManualForm();
+  }
   e.target.value = '';
 }
 
@@ -961,14 +1042,37 @@ function hideScanProgress(){
 
 /* OCR 100% berjalan di dalam browser/HP sendiri (Tesseract.js), tanpa server & tanpa internet setelah library dimuat. */
 async function scanKKWithOCR(imageDataUrl){
-  const result = await Tesseract.recognize(imageDataUrl, 'ind', {
+  const processed = await preprocessImageForOCR(imageDataUrl);
+  const worker = await Tesseract.createWorker('ind', 1, {
     logger: (m)=>{
-      if(m.status==='recognizing text'){ showScanProgress(m.progress, 'Membaca teks KK...'); }
-      else if(m.status){ showScanProgress(0.05, m.status); }
+      if(m.status==='recognizing text'){ showScanProgress(0.15 + m.progress*0.85, 'Membaca teks KK...'); }
+      else if(m.status){ showScanProgress(0.1, m.status); }
     }
   });
-  const text = result.data.text || '';
+  // PSM 6 = anggap dokumen sebagai satu blok teks seragam — untuk dokumen
+  // bertabel padat seperti KK ini biasanya lebih akurat daripada mode otomatis.
+  await worker.setParameters({ tessedit_pageseg_mode: '6' });
+  const result = await worker.recognize(processed);
+  await worker.terminate();
+  const text = fixOcrDigitConfusions(result.data.text || '');
   return parseKKText(text);
+}
+/* Perbaiki kekeliruan umum OCR pada deret angka panjang (No. KK / NIK 16 digit):
+   O/o->0, I/l/i->1, S/s->5, B/b->8, Z/z->2, G/g->6 — hanya diterapkan pada
+   kelompok karakter yang MAYORITAS sudah berupa angka, supaya nama/alamat
+   (yang mayoritas huruf) tidak ikut berubah. */
+function fixOcrDigitConfusions(text){
+  return text.replace(/[0-9OoIlSsBbZzGg]{14,20}/g, (chunk)=>{
+    const digitCount = (chunk.match(/[0-9]/g)||[]).length;
+    if(digitCount < chunk.length * 0.6) return chunk;
+    return chunk
+      .replace(/[Oo]/g,'0')
+      .replace(/[IlI]/g,'1')
+      .replace(/[Ss]/g,'5')
+      .replace(/[Bb]/g,'8')
+      .replace(/[Zz]/g,'2')
+      .replace(/[Gg]/g,'6');
+  });
 }
 
 function parseKKText(text){
