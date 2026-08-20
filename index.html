@@ -727,6 +727,45 @@ function saveSyncQueue(q){ localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q
 function syncConfigured(){ return !!(SYNC_CFG.url && SYNC_CFG.token); }
 function setSyncStatus(text){ const el=document.getElementById('sync-status'); if(el) el.textContent = text; }
 
+/* ============ TOMBSTONE (mencegah data yang sudah dihapus "muncul lagi") ============
+   Kalau HP A menghapus sebuah surat/undangan/warga tapi HP B belum sempat ambil
+   perubahan itu sebelum HP B mengirim perubahannya sendiri (mis. HP B baru
+   membuka app dan langsung meng-upsert data lamanya), data yang sudah dihapus
+   bisa "dihidupkan lagi" di server oleh HP B tanpa disengaja. Supaya HP yang
+   TADI menghapus tidak melihatnya muncul lagi, setiap id yang pernah dihapus
+   dari HP ini disimpan di sini dan selalu disaring keluar setiap kali data
+   ditarik ulang dari server — sampai tombstone-nya kedaluwarsa. */
+const TOMBSTONE_KEY = 'rt-app-tombstones';
+const TOMBSTONE_MAX_AGE_MS = 60*24*60*60*1000; // 60 hari
+function loadTombstones(){
+  try{ return JSON.parse(localStorage.getItem(TOMBSTONE_KEY)) || { warga:{}, surat:{}, undangan:{} }; }
+  catch(e){ return { warga:{}, surat:{}, undangan:{} }; }
+}
+function saveTombstones(t){ localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(t)); }
+function markDeleted(entity, id){
+  const t = loadTombstones();
+  if(!t[entity]) t[entity] = {};
+  t[entity][id] = Date.now();
+  saveTombstones(t);
+}
+function pruneTombstones(){
+  const t = loadTombstones();
+  const now = Date.now();
+  let changed = false;
+  Object.keys(t).forEach(entity=>{
+    Object.keys(t[entity]).forEach(id=>{
+      if(now - t[entity][id] > TOMBSTONE_MAX_AGE_MS){ delete t[entity][id]; changed = true; }
+    });
+  });
+  if(changed) saveTombstones(t);
+  return t;
+}
+function filterTombstoned(entity, list){
+  const t = loadTombstones();
+  const dead = t[entity] || {};
+  return (list||[]).filter(item => !(item && dead[item.id]));
+}
+
 function queuePush(entity, op, record){
   if(!syncConfigured()) return;
   const q = loadSyncQueue();
@@ -741,15 +780,19 @@ async function flushSyncQueue(){
   let q = loadSyncQueue();
   if(q.length === 0) return;
   syncFlushing = true;
-  setSyncStatus('Menyinkronkan '+q.length+' perubahan...');
+  setSyncStatus('Menyinkronkan '+q.length+' perubahan — tergantung koneksi internet...');
   while(q.length){
     const item = q[0];
     try{
+      const controller = new AbortController();
+      const timeoutId = setTimeout(()=>controller.abort(), 25000);
       const res = await fetch(SYNC_CFG.url, {
         method:'POST',
         headers: {'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({ token: SYNC_CFG.token, entity: item.entity, op: item.op, record: item.record })
+        body: JSON.stringify({ token: SYNC_CFG.token, entity: item.entity, op: item.op, record: item.record }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await res.json();
       if(!data.ok) throw new Error(data.error || 'Server menolak data');
       q.shift();
@@ -772,22 +815,33 @@ async function pullFromServer(silent){
     await flushSyncQueue();
     if(loadSyncQueue().length>0) return; // masih ada yg blm terkirim, jangan timpa data lokal dulu
   }
+  pruneTombstones();
   try{
-    if(!silent) setSyncStatus('Mengambil data terbaru dari pengurus lain...');
-    const res = await fetch(SYNC_CFG.url+'?action=pullAll&token='+encodeURIComponent(SYNC_CFG.token));
+    if(!silent) setSyncStatus('Mengambil data terbaru — kecepatan tergantung koneksi internet...');
+    // Batas waktu 25 detik: Google Apps Script kadang lambat merespons (apalagi
+    // baru "bangun" setelah lama tidak dipakai) — supaya tidak terasa macet
+    // tanpa kepastian, setelah 25 detik proses dibatalkan dan status diberi tahu.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(()=>controller.abort(), 25000);
+    const res = await fetch(SYNC_CFG.url+'?action=pullAll&token='+encodeURIComponent(SYNC_CFG.token), { signal: controller.signal });
+    clearTimeout(timeoutId);
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Gagal mengambil data');
     if(data.profil) STATE.profil = Object.assign({}, STATE.profil, data.profil);
-    STATE.warga = data.warga || [];
+    STATE.warga = filterTombstoned('warga', data.warga);
     STATE.iuran = data.iuran || {};
-    STATE.surat = data.surat || [];
-    STATE.undangan = data.undangan || [];
+    STATE.surat = filterTombstoned('surat', data.surat);
+    STATE.undangan = filterTombstoned('undangan', data.undangan);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
     safeRender();
     setSyncStatus('Tersinkron pukul '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}));
   }catch(err){
     console.log('Gagal ambil data terbaru (mungkin offline):', err);
-    setSyncStatus('Offline — memakai data tersimpan di HP ini');
+    if(err && err.name === 'AbortError'){
+      setSyncStatus('Koneksi internet lambat — sinkronisasi dibatalkan, dicoba lagi otomatis');
+    } else {
+      setSyncStatus('Offline — memakai data tersimpan di HP ini');
+    }
   }
 }
 
@@ -1245,6 +1299,7 @@ function deleteWarga(id){
   STATE.warga = STATE.warga.filter(w=>w.id!==id);
   Object.keys(STATE.iuran).forEach(m=>{ delete STATE.iuran[m][id]; });
   saveState();
+  markDeleted('warga', id);
   queuePush('warga','delete', {id});
   closeSheet('sheet-detail');
   toast('Data warga dihapus');
@@ -1503,6 +1558,7 @@ function deleteSurat(id){
   if(!confirm('Hapus surat ini dari riwayat?')) return;
   STATE.surat = STATE.surat.filter(s=>s.id!==id);
   saveState();
+  markDeleted('surat', id);
   queuePush('surat','delete', {id});
   toast('Surat dihapus');
   renderSuratList();
@@ -1715,6 +1771,7 @@ function deleteUndangan(id){
   if(!confirm('Hapus undangan ini dari riwayat?')) return;
   STATE.undangan = STATE.undangan.filter(u=>u.id!==id);
   saveState();
+  markDeleted('undangan', id);
   queuePush('undangan','delete', {id});
   toast('Undangan dihapus');
   renderUndanganList();
