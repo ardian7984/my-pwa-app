@@ -311,6 +311,7 @@
       <div class="stat-card red"><div class="num" id="d-nunggak">0</div><div class="label">Nunggak bulan ini</div></div>
       <div class="stat-card"><div class="num" id="d-total-kk">0</div><div class="label">Total KK</div></div>
       <div class="stat-card"><div class="num mono" id="d-total-uang" style="font-size:19px;">Rp0</div><div class="label">Terkumpul bulan ini</div></div>
+      <div class="stat-card"><div class="num mono" id="d-kas-rt" style="font-size:19px;">Rp0</div><div class="label">💰 Kas RT (dari bank sampah)</div></div>
     </div>
 
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;">
@@ -528,6 +529,39 @@ Ani Santoso, 3371011234560002, Istri, A"></textarea>
   </div>
 </div>
 
+<!-- SHEET: Bank Sampah (pengurus) -->
+<div class="sheet-backdrop hidden" id="sheet-banksampah" onclick="closeOnBackdrop(event,'sheet-banksampah')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header"><div class="sheet-title">♻️ Bank Sampah — <span id="bs-name">-</span></div><button class="icon-btn" onclick="closeSheet('sheet-banksampah')">✕</button></div>
+    <div class="card" style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--ink-soft);">Saldo tabungan bank sampah</div>
+      <div id="bs-saldo" class="mono" style="font-size:22px;font-weight:700;color:#1a7a3a;">Rp0</div>
+    </div>
+
+    <div class="section-title">Catat setoran sampah</div>
+    <label>Jumlah (Rp)</label>
+    <input id="bs-jumlah" type="number" inputmode="numeric" placeholder="cth. 15000">
+    <label>Keterangan (opsional)</label>
+    <input id="bs-ket" placeholder="cth. sampah plastik 3kg">
+    <div style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="catatSetoranSampah()">+ Simpan setoran</button>
+    </div>
+
+    <div class="section-title" style="margin-top:22px;">Pindahkan ke Kas RT</div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Seperti pindah kantong tabungan (ala Bank Jago) — saldo bank sampah dipindah untuk langsung melunasi iuran rutin bulan berjalan, atau disetor umum ke kas RT.</p>
+    <button class="btn btn-outline" onclick="pindahSampahKeKasRT('iuran')">💳 Bayar iuran bulan ini dari tabungan</button>
+    <label style="margin-top:12px;">Jumlah setor umum ke kas RT (Rp)</label>
+    <input id="bs-jumlah-pindah" type="number" inputmode="numeric" placeholder="cth. 20000">
+    <div style="margin-top:8px;">
+      <button class="btn btn-outline" onclick="pindahSampahKeKasRT('umum')">↔️ Setor ke kas RT</button>
+    </div>
+
+    <div class="section-title" style="margin-top:22px;">Riwayat transaksi</div>
+    <div id="bs-riwayat"></div>
+  </div>
+</div>
+
 <!-- SHEET: cari golongan darah -->
 <div class="sheet-backdrop hidden" id="sheet-gol-darah" onclick="closeOnBackdrop(event,'sheet-gol-darah')">
   <div class="sheet" onclick="event.stopPropagation()">
@@ -687,16 +721,44 @@ const LOGO_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAFACAIAAABC
 /* ============ STATE ============ */
 let STATE = {
   profil: { nama:'RT 01/RW -, Jeruk, Kepek', kelurahan:'', kecamatan:'', kabupaten:'', ketua:'', iuranDefault:50000, wa:'' },
-  warga: [],   // {id, noKK, kepala, alamat, blok, wa, anggota:[{nama,nik,status}]}
+  warga: [],   // {id, noKK, kepala, alamat, blok, wa, anggota:[{nama,nik,status}], bankSampah:{saldo, riwayat:[]}}
   iuran: {},   // { "2026-08": { wargaId: true/false } }
   surat: [],   // {id, tgl, nama, nik, keperluan, nomor}
-  undangan: [] // {id, tgl, tanggalAcara, penyelenggara, pasaran}
+  undangan: []  // {id, tgl, tanggalAcara, penyelenggara, pasaran}
 };
 let currentView = 'dashboard';
 let currentBulan = monthKey(new Date());
 let iuranFilter = 'semua';
 let editingWargaId = null;
 let pendingKKImage = null;
+let bankSampahWargaId = null;
+
+/* ============ BANK SAMPAH ============
+   Tiap KK punya "kantong" tabungan bank sampah sendiri (mirip Bank Jago),
+   diisi dari hasil setor/jual sampah. Saldo ini bisa dipindahkan kapan saja
+   ke Kas RT — baik untuk langsung melunasi iuran rutin bulan berjalan,
+   maupun sekadar disetorkan umum ke kas RT. Hanya Pengurus RT yang bisa
+   mencatat setoran & memindahkan saldo; Warga hanya bisa melihat. */
+function ensureBankSampah(w){
+  if(!w.bankSampah) w.bankSampah = { saldo:0, riwayat:[] };
+  if(!Array.isArray(w.bankSampah.riwayat)) w.bankSampah.riwayat = [];
+  if(typeof w.bankSampah.saldo !== 'number') w.bankSampah.saldo = 0;
+  return w.bankSampah;
+}
+function bsSaldo(w){ return (w && w.bankSampah && typeof w.bankSampah.saldo==='number') ? w.bankSampah.saldo : 0; }
+// Kas RT dihitung dari kumpulan riwayat "pindah_kas" di semua tabungan bank sampah warga —
+// tidak disimpan terpisah supaya tetap ikut sinkron lewat data warga yang sudah ada.
+function getKasRTLedger(){
+  const rows = [];
+  (STATE.warga||[]).forEach(w=>{
+    ((w.bankSampah&&w.bankSampah.riwayat)||[]).forEach(r=>{
+      if(r.jenis==='pindah_kas') rows.push({ tgl:r.tgl, wargaId:w.id, kepala:w.kepala, jumlah:r.jumlah, tujuan:r.tujuan||'umum', keterangan:r.keterangan });
+    });
+  });
+  rows.sort((a,b)=> (b.tgl||0)-(a.tgl||0));
+  return rows;
+}
+function kasRTTotal(){ return getKasRTLedger().reduce((s,x)=> s + (x.jumlah||0), 0); }
 
 function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function monthLabel(key){
@@ -1329,6 +1391,13 @@ function openDetailWarga(id){
         <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'LUNAS':'NUNGGAK'}</span>
       </div>
     </div>
+    <div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:12px;color:var(--ink-soft);">♻️ Tabungan bank sampah</div>
+        <div class="mono" style="font-size:16px;font-weight:700;color:#1a7a3a;">${rupiah(bsSaldo(w))}</div>
+      </div>
+      <button class="btn btn-outline" style="width:auto;padding:8px 14px;" onclick="openBankSampah('${id}')">Kelola</button>
+    </div>
     <div class="section-title" style="margin-top:16px;">Anggota keluarga (${w.anggota.length})</div>
     <div class="card">`;
   if(w.anggota.length===0){ html += `<div style="font-size:13px;color:var(--ink-soft);">Belum ada data anggota</div>`; }
@@ -1380,6 +1449,81 @@ function deleteWarga(id){
   closeSheet('sheet-detail');
   toast('Data warga dihapus');
   renderWargaList(); renderIuranList(); renderDashboard();
+}
+
+/* ============ BANK SAMPAH (pengurus saja yang bisa mencatat/pindah) ============ */
+function openBankSampah(id){
+  const w = STATE.warga.find(x=>x.id===id);
+  if(!w) return;
+  ensureBankSampah(w);
+  bankSampahWargaId = id;
+  document.getElementById('bs-name').textContent = w.kepala;
+  document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
+  document.getElementById('bs-jumlah').value = '';
+  document.getElementById('bs-ket').value = '';
+  document.getElementById('bs-jumlah-pindah').value = '';
+  renderBankSampahRiwayat(w);
+  closeSheet('sheet-detail');
+  openSheet('sheet-banksampah');
+}
+function renderBankSampahRiwayat(w){
+  const el = document.getElementById('bs-riwayat');
+  if(!el) return;
+  const items = ((w.bankSampah&&w.bankSampah.riwayat)||[]).slice().reverse().slice(0,15);
+  if(items.length===0){ el.innerHTML = '<div style="font-size:12.5px;color:var(--ink-soft);padding:8px 0;">Belum ada transaksi</div>'; return; }
+  el.innerHTML = items.map(r=>`
+    <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;">
+      <div>
+        <div>${r.jenis==='setor' ? '♻️ Setor sampah' : '↔️ Pindah ke Kas RT'}${r.keterangan ? (' — '+escapeHTML(r.keterangan)) : ''}</div>
+        <div class="mono" style="color:var(--ink-soft);">${new Date(r.tgl).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}</div>
+      </div>
+      <div class="mono" style="font-weight:700;white-space:nowrap;color:${r.jenis==='setor'?'#1a7a3a':'#C0392B'};">${r.jenis==='setor'?'+':'-'}${rupiah(r.jumlah)}</div>
+    </div>`).join('');
+}
+function catatSetoranSampah(){
+  const w = STATE.warga.find(x=>x.id===bankSampahWargaId);
+  if(!w) return;
+  const jumlah = parseInt(document.getElementById('bs-jumlah').value);
+  if(!jumlah || jumlah<=0){ toast('Isi jumlah setoran yang valid'); return; }
+  const ket = document.getElementById('bs-ket').value.trim();
+  ensureBankSampah(w);
+  w.bankSampah.saldo += jumlah;
+  w.bankSampah.riwayat.push({ id: uid(), tgl: Date.now(), jenis:'setor', jumlah, keterangan: ket });
+  saveState();
+  queuePush('warga','upsert', w);
+  toast('Setoran sampah dicatat, saldo tabungan bertambah');
+  document.getElementById('bs-jumlah').value=''; document.getElementById('bs-ket').value='';
+  document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
+  renderBankSampahRiwayat(w);
+  renderWargaList(); renderDashboard();
+}
+function pindahSampahKeKasRT(tujuan){
+  const w = STATE.warga.find(x=>x.id===bankSampahWargaId);
+  if(!w) return;
+  ensureBankSampah(w);
+  let jumlah;
+  if(tujuan==='iuran'){
+    jumlah = w.iuran || STATE.profil.iuranDefault || 0;
+  } else {
+    jumlah = parseInt(document.getElementById('bs-jumlah-pindah').value);
+  }
+  if(!jumlah || jumlah<=0){ toast('Isi jumlah yang valid'); return; }
+  if(jumlah > w.bankSampah.saldo){ toast('Saldo tabungan bank sampah tidak cukup'); return; }
+  w.bankSampah.saldo -= jumlah;
+  const ket = tujuan==='iuran' ? ('Bayar iuran '+monthLabel(currentBulan)) : 'Setor umum ke kas RT';
+  w.bankSampah.riwayat.push({ id: uid(), tgl: Date.now(), jenis:'pindah_kas', jumlah, tujuan, keterangan: ket });
+  if(tujuan==='iuran'){
+    if(!STATE.iuran[currentBulan]) STATE.iuran[currentBulan] = {};
+    STATE.iuran[currentBulan][w.id] = true;
+    queuePush('iuran','upsert', { bulan: currentBulan, wargaId: w.id, lunas: true });
+  }
+  saveState();
+  queuePush('warga','upsert', w);
+  toast(tujuan==='iuran' ? 'Iuran bulan ini lunas dari tabungan bank sampah' : 'Tabungan dipindahkan ke kas RT');
+  document.getElementById('bs-jumlah-pindah').value='';
+  document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
+  renderBankSampahRiwayat(w);
+  renderIuranList(); renderWargaList(); renderDashboard();
 }
 
 /* ============ IURAN ============ */
@@ -1583,6 +1727,7 @@ function renderDashboard(){
   document.getElementById('d-total-kk').textContent = total;
   const totalUangBulanIni = STATE.warga.filter(w=>isLunas(w.id, monthKey(new Date()))).reduce((sum,w)=> sum + (w.iuran || STATE.profil.iuranDefault || 0), 0);
   document.getElementById('d-total-uang').textContent = rupiah(totalUangBulanIni);
+  document.getElementById('d-kas-rt').textContent = rupiah(kasRTTotal());
   document.getElementById('tb-sub').textContent = STATE.profil.nama + (STATE.profil.ketua ? (' · '+STATE.profil.ketua) : '');
 
   const nunggakList = STATE.warga.filter(w=>!isLunas(w.id, monthKey(new Date()))).slice(0,5);
@@ -2257,6 +2402,10 @@ function startApp(){
 }
 
 function initAuth(){
+  // Kop/logo di layar login harus tampil SEBELUM login berhasil juga (sama seperti
+  // kop surat resmi) — sebelumnya src cuma diisi di dalam startApp(), yang baru
+  // jalan SETELAH login sukses, jadi layar login selalu menampilkan lingkaran kosong.
+  document.getElementById('login-logo').src = LOGO_SRC;
   const auth = getAuth();
   if(auth && VALID_CREDENTIALS[auth.role]){
     startApp();
@@ -2288,11 +2437,18 @@ function renderLaporanWarga(){
       (w.anggota||[]).some(a=>(a.nama||'').toLowerCase().includes(q))
     );
   }
+  const kasSummary = `
+    <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:12px;color:var(--ink-soft);">💰 Total kas RT (dari pindahan tabungan bank sampah)</div>
+        <div class="mono" style="font-size:16px;font-weight:700;">${rupiah(kasRTTotal())}</div>
+      </div>
+    </div>`;
   if(list.length===0){
-    elList.innerHTML = '<div class="empty">Data keluarga tidak ditemukan.</div>';
+    elList.innerHTML = kasSummary + '<div class="empty">Data keluarga tidak ditemukan.</div>';
     return;
   }
-  elList.innerHTML = list.map(w=>{
+  elList.innerHTML = kasSummary + list.map(w=>{
     const anggotaHTML = (w.anggota||[]).map(a=>`
       <div class="anggota-item">
         <div>
@@ -2303,10 +2459,18 @@ function renderLaporanWarga(){
           ${a.golDarah ? `<div class="k" style="color:var(--warn);font-weight:700;">🩸 ${escapeHTML(a.golDarah)}</div>` : `<div class="k" style="color:var(--ink-soft);">-</div>`}
         </div>
       </div>`).join('');
+    const statusBulanIni = !!(STATE.iuran[currentBulan] && STATE.iuran[currentBulan][w.id]);
     return `
       <div class="card" style="margin-bottom:12px;">
-        <div style="font-weight:700;font-size:14.5px;">${escapeHTML(w.kepala||'-')}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div style="font-weight:700;font-size:14.5px;">${escapeHTML(w.kepala||'-')}</div>
+          <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'IURAN LUNAS':'IURAN NUNGGAK'}</span>
+        </div>
         <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">No KK: ${escapeHTML(w.noKK||'-')}${w.blok?(' &middot; Blok '+escapeHTML(w.blok)):''}<br>${escapeHTML(w.alamat||'-')}</div>
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;background:var(--paper2,#F7F5EF);border-radius:10px;padding:8px 10px;margin-bottom:10px;">
+          <span>♻️ Tabungan bank sampah</span>
+          <b class="mono" style="color:#1a7a3a;">${rupiah(bsSaldo(w))}</b>
+        </div>
         ${anggotaHTML || '<div class="empty" style="padding:8px 0;">Belum ada data anggota.</div>'}
       </div>`;
   }).join('');

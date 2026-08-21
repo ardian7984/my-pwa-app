@@ -3,7 +3,7 @@
    perubahan kode ke GitHub. Ini yang memicu HP pengguna membuang cache
    lama dan mengambil file baru.
    ===================================================================== */
-const CACHE_NAME = 'aplikasi-rt-cache-v16';
+const CACHE_NAME = 'aplikasi-rt-cache-v17';
 
 const APP_SHELL = [
   './index.html',
