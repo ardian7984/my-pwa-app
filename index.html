@@ -79,6 +79,7 @@
   .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
 
   .view{padding:18px 20px 8px;}
+  .hidden{display:none;}
   .view.hidden{display:none;}
   .navbtn.hidden{display:none;}
 
@@ -130,6 +131,9 @@
   }
   .badge.lunas{background:var(--primary-tint); color:var(--primary-dark);}
   .badge.nunggak{background:var(--warn-tint); color:var(--warn);}
+  .badge.tempel{background:var(--gold-tint); color:#8A5F10; border:1px solid var(--gold);}
+  .row-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .row-actions .icon-btn{width:28px;height:28px;border-radius:9px;font-size:13px;}
 
   /* buttons */
   .btn{
@@ -335,9 +339,18 @@
   <!-- WARGA -->
   <div class="view hidden" id="view-warga">
     <input type="text" id="w-search" placeholder="Cari nama, No KK, atau NIK..." oninput="renderWargaList()" style="margin-bottom:14px;">
+    <label style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;display:block;">Urutkan</label>
+    <select id="w-sort" onchange="renderWargaList()" style="margin-bottom:14px;">
+      <option value="nama-asc">Nama kepala keluarga (A-Z)</option>
+      <option value="nama-desc">Nama kepala keluarga (Z-A)</option>
+      <option value="blok">Blok / RT-RW</option>
+      <option value="jenis-kk">KK Tetap dulu, lalu KK Tempel</option>
+      <option value="status-iuran">Nunggak dulu</option>
+    </select>
     <div class="btn-row" style="margin-bottom:14px;">
       <button class="btn btn-outline" onclick="openCariGolDarah()">🩸 Cari Golongan Darah (Donor Darah)</button>
     </div>
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;">🟡 Tanda kuning = KK Tempel (numpang KK, bukan KK tetap warga sini)</div>
     <div id="warga-list"></div>
   </div>
 
@@ -390,6 +403,18 @@
       </div>
     </div>
     <input type="text" id="lap-search" placeholder="Cari nama, No KK, atau alamat..." oninput="renderLaporanWarga()" style="margin-bottom:14px;">
+    <label style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;display:block;">Urutkan</label>
+    <select id="lap-sort" onchange="renderLaporanWarga()" style="margin-bottom:14px;">
+      <option value="nama-asc">Nama kepala keluarga (A-Z)</option>
+      <option value="nama-desc">Nama kepala keluarga (Z-A)</option>
+      <option value="blok">Blok / RT-RW</option>
+      <option value="jenis-kk">KK Tetap dulu, lalu KK Tempel</option>
+      <option value="status-iuran">Nunggak dulu</option>
+    </select>
+    <div class="btn-row" style="margin-bottom:14px;">
+      <button class="btn btn-outline" onclick="openCariGolDarah()">🩸 Cari Golongan Darah (Donor Darah)</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;">🟡 Tanda kuning = KK Tempel (numpang KK, bukan KK tetap warga sini)</div>
     <div id="laporan-list"></div>
   </div>
 
@@ -529,6 +554,11 @@
     </div>
     <label>No. WA warga</label>
     <input id="f-wa" placeholder="6281234567890">
+    <label>Jenis KK <span style="font-weight:400;color:var(--ink-soft)">(status kependudukan keluarga ini)</span></label>
+    <select id="f-jenis-kk">
+      <option value="tetap">KK Tetap (warga tetap sini)</option>
+      <option value="tempel">KK Tempel (numpang / tidak tetap) 🟡</option>
+    </select>
     <label>Iuran warga per bulan (Rp) <span style="font-weight:400;color:var(--ink-soft)">(kosongkan = pakai iuran default)</span></label>
     <input id="f-iuran" type="number" inputmode="numeric" placeholder="cth. 50000">
     <label>Anggota keluarga <span style="font-weight:400;color:var(--ink-soft)">(pisahkan dengan baris baru — format: Nama, NIK, status, Gol. Darah)</span></label>
@@ -560,10 +590,20 @@ Ani Santoso, 3371011234560002, Istri, A"></textarea>
     </div>
 
     <div class="section-title">Catat setoran sampah</div>
+    <label>Jenis sampah yang dijual</label>
+    <select id="bs-jenis">
+      <option value="">-- pilih jenis (opsional) --</option>
+      <option value="Kardus">📦 Kardus</option>
+      <option value="Botol Plastik">🥤 Botol Plastik</option>
+      <option value="Botol/Beling Kaca">🍾 Botol/Beling Kaca</option>
+      <option value="Logam/Kaleng">🥫 Logam/Kaleng</option>
+      <option value="Kertas">📄 Kertas</option>
+      <option value="Campuran/Lainnya">♻️ Campuran/Lainnya</option>
+    </select>
     <label>Jumlah (Rp)</label>
     <input id="bs-jumlah" type="number" inputmode="numeric" placeholder="cth. 15000">
-    <label>Keterangan (opsional)</label>
-    <input id="bs-ket" placeholder="cth. sampah plastik 3kg">
+    <label>Keterangan (opsional) <span style="font-weight:400;color:var(--ink-soft)">cth. berat/jumlah</span></label>
+    <input id="bs-ket" placeholder="cth. 3kg">
     <div style="margin-top:12px;">
       <button class="btn btn-primary" onclick="catatSetoranSampah()">+ Simpan setoran</button>
     </div>
@@ -742,7 +782,7 @@ const LOGO_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAFACAIAAABC
 /* ============ STATE ============ */
 let STATE = {
   profil: { nama:'RT 01/RW -, Jeruk, Kepek', kelurahan:'', kecamatan:'', kabupaten:'', ketua:'', iuranDefault:50000, wa:'' },
-  warga: [],   // {id, noKK, kepala, alamat, blok, wa, anggota:[{nama,nik,status}], bankSampah:{saldo, riwayat:[]}}
+  warga: [],   // {id, noKK, kepala, alamat, blok, wa, jenisKK:'tetap'|'tempel', anggota:[{nama,nik,status,golDarah}], bankSampah:{saldo, riwayat:[{id,tgl,jenis:'setor'|'pindah_kas',jumlah,keterangan,jenisSampah,tujuan,bulanIuran}]}}
   iuran: {},   // { "2026-08": { wargaId: true/false } }
   surat: [],   // {id, tgl, nama, nik, keperluan, nomor}
   undangan: []  // {id, tgl, tanggalAcara, penyelenggara, pasaran}
@@ -818,6 +858,38 @@ function monthLabel(key){
 }
 function rupiah(n){ return 'Rp'+Number(n||0).toLocaleString('id-ID'); }
 function uid(){ return 'w'+Date.now()+Math.floor(Math.random()*1000); }
+// Tanda kuning "KK Tempel" (numpang KK / bukan KK tetap) dipakai di semua tampilan daftar warga.
+function isTempel(w){ return !!w && w.jenisKK==='tempel'; }
+function kkTagHTML(w, style){
+  if(!isTempel(w)) return '';
+  return `<span class="badge tempel" style="margin-left:6px;${style||''}">KK TEMPEL</span>`;
+}
+// Urutan sort dipakai bersama oleh daftar Warga (pengurus) & Laporan (warga).
+function sortWargaArray(arr, sortBy){
+  arr = arr.slice();
+  switch(sortBy){
+    case 'nama-desc':
+      arr.sort((a,b)=>(b.kepala||'').localeCompare(a.kepala||'')); break;
+    case 'blok':
+      arr.sort((a,b)=>(a.blok||'').localeCompare(b.blok||'') || (a.kepala||'').localeCompare(b.kepala||'')); break;
+    case 'jenis-kk':
+      arr.sort((a,b)=>{
+        const ja = isTempel(a) ? 1 : 0, jb = isTempel(b) ? 1 : 0;
+        if(ja!==jb) return ja-jb;
+        return (a.kepala||'').localeCompare(b.kepala||'');
+      }); break;
+    case 'status-iuran':
+      arr.sort((a,b)=>{
+        const la = isLunas(a.id) ? 1 : 0, lb = isLunas(b.id) ? 1 : 0;
+        if(la!==lb) return la-lb; // nunggak (0) dulu
+        return (a.kepala||'').localeCompare(b.kepala||'');
+      }); break;
+    case 'nama-asc':
+    default:
+      arr.sort((a,b)=>(a.kepala||'').localeCompare(b.kepala||''));
+  }
+  return arr;
+}
 
 /* ============ KALENDER JAWA (PASARAN) ============ */
 // Anchor terverifikasi: 17 Agustus 1945 = Jumat Legi (fakta sejarah baku).
@@ -1255,6 +1327,7 @@ function openManualForm(){
   document.getElementById('btn-retake-kk').style.display='none';
   document.getElementById('scan-warning').style.display='none';
   ['f-nokk','f-kepala','f-alamat','f-blok','f-wa','f-iuran','f-anggota'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-jenis-kk').value = 'tetap';
   openSheet('sheet-form');
 }
 
@@ -1349,6 +1422,7 @@ async function handleKKUpload(e){
     document.getElementById('f-blok').value = '';
     document.getElementById('f-wa').value = '';
     document.getElementById('f-iuran').value = '';
+    document.getElementById('f-jenis-kk').value = 'tetap';
     const anggotaText = (extracted.anggota||[]).map(a=>[a.nama||'',a.nik||'',a.status||''].join(', ')).join('\n');
     document.getElementById('f-anggota').value = anggotaText;
     openSheet('sheet-form');
@@ -1515,6 +1589,7 @@ function saveWarga(){
     alamat: document.getElementById('f-alamat').value.trim(),
     blok: document.getElementById('f-blok').value.trim(),
     wa: document.getElementById('f-wa').value.trim(),
+    jenisKK: document.getElementById('f-jenis-kk').value === 'tempel' ? 'tempel' : 'tetap',
     iuran: parseInt(document.getElementById('f-iuran').value)||null,
     anggota: parseAnggota(document.getElementById('f-anggota').value)
   };
@@ -1535,6 +1610,7 @@ function saveWarga(){
 function openDetailWarga(id){
   const w = STATE.warga.find(x=>x.id===id);
   if(!w) return;
+  if(CURRENT_ROLE==='warga'){ openDetailWargaWarga(w); return; }
   document.getElementById('detail-name').textContent = w.kepala;
   const statusBulanIni = isLunas(id);
   const infoIuranDetail = getIuranInfo(id);
@@ -1545,7 +1621,7 @@ function openDetailWarga(id){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <div class="mono" style="font-size:12px;color:var(--ink-soft);">No. KK: ${w.noKK||'-'}</div>
+          <div class="mono" style="font-size:12px;color:var(--ink-soft);">No. KK: ${w.noKK||'-'}${kkTagHTML(w)}</div>
           <div style="font-size:13.5px;margin-top:4px;">${w.alamat||'-'} ${w.blok?('· '+w.blok):''}</div>
           <div style="font-size:12.5px;margin-top:4px;color:var(--ink-soft);">Iuran/bulan: <b class="mono" style="color:var(--ink);">${rupiah(w.iuran || STATE.profil.iuranDefault || 0)}</b>${w.iuran?'':' (default)'}</div>
         </div>
@@ -1553,6 +1629,10 @@ function openDetailWarga(id){
           <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'LUNAS':'NUNGGAK'}</span>
           ${catatanBayarDetail}
         </div>
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-outline btn-sm" style="flex:1;" onclick="editIuranManual('${id}')">✏️ Edit iuran bulan ini</button>
+        <button class="btn btn-outline btn-sm" style="flex:1;" onclick="hapusIuran('${id}')">🗑️ Hapus catatan iuran</button>
       </div>
     </div>
     <div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
@@ -1581,6 +1661,48 @@ function openDetailWarga(id){
   document.getElementById('detail-body').innerHTML = html;
   openSheet('sheet-detail');
 }
+
+/* Versi read-only untuk akun Warga: tanpa tombol edit/hapus/kelola, NIK disamarkan,
+   tapi tetap menampilkan riwayat keuangan (iuran + tabungan bank sampah) supaya
+   tiap warga bisa melihat history keuangannya sendiri dengan jelas. */
+function openDetailWargaWarga(w){
+  document.getElementById('detail-name').textContent = w.kepala;
+  const statusBulanIni = isLunas(w.id);
+  const infoIuranDetail = getIuranInfo(w.id);
+  let catatanBayarDetail = '';
+  if(statusBulanIni && infoIuranDetail.selisih < 0) catatanBayarDetail = '<div style="font-size:11.5px;color:#C0392B;margin-top:2px;">Kurang bayar '+rupiah(-infoIuranDetail.selisih)+'</div>';
+  else if(statusBulanIni && infoIuranDetail.selisih > 0) catatanBayarDetail = '<div style="font-size:11.5px;color:#1a7a3a;margin-top:2px;">Lebih bayar '+rupiah(infoIuranDetail.selisih)+'</div>';
+  let html = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="mono" style="font-size:12px;color:var(--ink-soft);">No. KK: ${escapeHTML(w.noKK||'-')}${kkTagHTML(w)}</div>
+          <div style="font-size:13.5px;margin-top:4px;">${escapeHTML(w.alamat||'-')} ${w.blok?('· '+escapeHTML(w.blok)):''}</div>
+          <div style="font-size:12.5px;margin-top:4px;color:var(--ink-soft);">Iuran/bulan: <b class="mono" style="color:var(--ink);">${rupiah(w.iuran || STATE.profil.iuranDefault || 0)}</b>${w.iuran?'':' (default)'}</div>
+        </div>
+        <div style="text-align:right;">
+          <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'LUNAS':'NUNGGAK'}</span>
+          ${catatanBayarDetail}
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <div style="font-size:12px;color:var(--ink-soft);">♻️ Saldo tabungan bank sampah</div>
+      <div class="mono" style="font-size:16px;font-weight:700;color:#1a7a3a;">${rupiah(bsSaldo(w))}</div>
+    </div>
+    <div class="section-title" style="margin-top:16px;">Anggota keluarga (${w.anggota.length})</div>
+    <div class="card">`;
+  if(w.anggota.length===0){ html += `<div style="font-size:13px;color:var(--ink-soft);">Belum ada data anggota</div>`; }
+  w.anggota.forEach(a=>{
+    html += `<div class="anggota-item"><div><div class="n">${escapeHTML(a.nama)}</div><div class="k mono">${escapeHTML(maskNIK(a.nik))}</div></div><div style="text-align:right;"><div class="k">${escapeHTML(a.status||'')}</div>${a.golDarah?`<div class="k" style="color:var(--warn,#C0392B);font-weight:700;">🩸 ${escapeHTML(a.golDarah)}</div>`:''}</div></div>`;
+  });
+  html += `</div>
+    <div class="section-title" style="margin-top:16px;">📜 Riwayat keuangan</div>
+    <div class="card">${renderRiwayatKeuanganHTML(w)}</div>
+  `;
+  document.getElementById('detail-body').innerHTML = html;
+  openSheet('sheet-detail');
+}
 function toggleLunasFromDetail(id){
   toggleLunas(id);
   closeSheet('sheet-detail');
@@ -1599,6 +1721,7 @@ function editWarga(id){
   document.getElementById('f-alamat').value = w.alamat||'';
   document.getElementById('f-blok').value = w.blok||'';
   document.getElementById('f-wa').value = w.wa||'';
+  document.getElementById('f-jenis-kk').value = w.jenisKK==='tempel' ? 'tempel' : 'tetap';
   document.getElementById('f-iuran').value = w.iuran||'';
   document.getElementById('f-anggota').value = w.anggota.map(a=>[a.nama,a.nik,a.status,a.golDarah||''].join(', ')).join('\n');
   openSheet('sheet-form');
@@ -1625,6 +1748,7 @@ function openBankSampah(id){
   document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
   document.getElementById('bs-jumlah').value = '';
   document.getElementById('bs-ket').value = '';
+  document.getElementById('bs-jenis').value = '';
   document.getElementById('bs-jumlah-pindah').value = '';
   const tagihan = w.iuran || STATE.profil.iuranDefault || 0;
   const infoIuran = getIuranInfo(w.id);
@@ -1639,6 +1763,60 @@ function openBankSampah(id){
   closeSheet('sheet-detail');
   openSheet('sheet-banksampah');
 }
+/* Gabungan riwayat iuran + tabungan bank sampah per KK, diurutkan dari yang terbaru.
+   Dipakai supaya tiap warga bisa melihat jelas history keuangannya: kapan bayar iuran,
+   kapan setor sampah (dengan keterangan jenis sampahnya), dan kapan dipindah ke kas RT. */
+function getRiwayatKeuanganItems(w){
+  const items = [];
+  Object.keys(STATE.iuran||{}).forEach(bulan=>{
+    const raw = STATE.iuran[bulan] && STATE.iuran[bulan][w.id];
+    if(!raw) return;
+    const info = (typeof raw === 'object') ? raw : { lunas:true };
+    const [y,m] = bulan.split('-');
+    const tgl = new Date(parseInt(y), parseInt(m)-1, 1).getTime();
+    let ket = '';
+    if(info.selisih < 0) ket = 'Kurang bayar '+rupiah(-info.selisih);
+    else if(info.selisih > 0) ket = 'Lebih bayar '+rupiah(info.selisih);
+    items.push({
+      tgl, tipe:'iuran', arah:'+',
+      label: '💳 Iuran warga — '+monthLabel(bulan),
+      jumlah: (typeof info.dibayar==='number') ? info.dibayar : (w.iuran || STATE.profil.iuranDefault || 0),
+      keterangan: ket
+    });
+  });
+  ((w.bankSampah&&w.bankSampah.riwayat)||[]).forEach(r=>{
+    if(r.jenis==='setor'){
+      items.push({
+        tgl: r.tgl, tipe:'sampah', arah:'+',
+        label: '♻️ Setor sampah bank sampah'+(r.jenisSampah?(' — '+r.jenisSampah):''),
+        jumlah: r.jumlah,
+        keterangan: r.keterangan||''
+      });
+    } else {
+      items.push({
+        tgl: r.tgl, tipe:'pindah', arah:'-',
+        label: r.tujuan==='iuran' ? '↔️ Tabungan dipindah untuk bayar iuran' : '↔️ Tabungan dipindah ke Kas RT',
+        jumlah: r.jumlah,
+        keterangan: r.keterangan||''
+      });
+    }
+  });
+  items.sort((a,b)=> (b.tgl||0)-(a.tgl||0));
+  return items;
+}
+function renderRiwayatKeuanganHTML(w){
+  const items = getRiwayatKeuanganItems(w).slice(0,30);
+  if(items.length===0) return '<div style="font-size:12.5px;color:var(--ink-soft);padding:6px 0;">Belum ada riwayat keuangan.</div>';
+  return items.map(it=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;">
+      <div>
+        <div>${escapeHTML(it.label)}</div>
+        ${it.keterangan?`<div style="color:var(--ink-soft);">${escapeHTML(it.keterangan)}</div>`:''}
+        <div class="mono" style="color:var(--ink-soft);">${it.tgl?new Date(it.tgl).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}):'-'}</div>
+      </div>
+      <div class="mono" style="font-weight:700;white-space:nowrap;color:${it.arah==='+'?'#1a7a3a':'#C0392B'};">${it.arah}${rupiah(it.jumlah)}</div>
+    </div>`).join('');
+}
 function renderBankSampahRiwayat(w){
   const el = document.getElementById('bs-riwayat');
   if(!el) return;
@@ -1647,7 +1825,7 @@ function renderBankSampahRiwayat(w){
   el.innerHTML = items.map(r=>`
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;">
       <div>
-        <div>${r.jenis==='setor' ? '♻️ Setor sampah' : '↔️ Pindah ke Kas RT'}${r.keterangan ? (' — '+escapeHTML(r.keterangan)) : ''}</div>
+        <div>${r.jenis==='setor' ? ('♻️ Setor sampah'+(r.jenisSampah?(' — '+escapeHTML(r.jenisSampah)):'')) : '↔️ Pindah ke Kas RT'}${r.keterangan ? (' · '+escapeHTML(r.keterangan)) : ''}</div>
         <div class="mono" style="color:var(--ink-soft);">${new Date(r.tgl).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -1715,13 +1893,14 @@ function catatSetoranSampah(){
   const jumlah = parseInt(document.getElementById('bs-jumlah').value);
   if(!jumlah || jumlah<=0){ toast('Isi jumlah setoran yang valid'); return; }
   const ket = document.getElementById('bs-ket').value.trim();
+  const jenisSampah = document.getElementById('bs-jenis').value;
   ensureBankSampah(w);
   w.bankSampah.saldo += jumlah;
-  w.bankSampah.riwayat.push({ id: uid(), tgl: Date.now(), jenis:'setor', jumlah, keterangan: ket });
+  w.bankSampah.riwayat.push({ id: uid(), tgl: Date.now(), jenis:'setor', jumlah, keterangan: ket, jenisSampah });
   saveState();
   queuePush('warga','upsert', w);
   toast('Setoran sampah dicatat, saldo tabungan bertambah');
-  document.getElementById('bs-jumlah').value=''; document.getElementById('bs-ket').value='';
+  document.getElementById('bs-jumlah').value=''; document.getElementById('bs-ket').value=''; document.getElementById('bs-jenis').value='';
   document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
   renderBankSampahRiwayat(w);
   renderWargaList(); renderDashboard();
@@ -1823,13 +2002,56 @@ function renderIuranList(){
     return `<div class="warga-row ${lunas?'lunas':'nunggak'}" onclick="openDetailWarga('${w.id}')">
       <div class="avatar">${(w.kepala||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
-        <div class="name">${w.kepala}</div>
+        <div class="name">${w.kepala}${kkTagHTML(w)}</div>
         <div class="meta">${w.noKK||'No KK -'} ${w.blok?('· '+w.blok):''}</div>
         ${catatan}
       </div>
-      <span class="badge ${lunas?'lunas':'nunggak'}" onclick="event.stopPropagation(); toggleLunas('${w.id}')">${lunas?'LUNAS':'NUNGGAK'}</span>
+      <div class="row-actions">
+        <span class="badge ${lunas?'lunas':'nunggak'}" onclick="event.stopPropagation(); toggleLunas('${w.id}')">${lunas?'LUNAS':'NUNGGAK'}</span>
+        <button class="icon-btn" onclick="event.stopPropagation(); editIuranManual('${w.id}')" aria-label="Edit iuran">✏️</button>
+        <button class="icon-btn" onclick="event.stopPropagation(); hapusIuran('${w.id}')" aria-label="Hapus iuran">🗑️</button>
+      </div>
     </div>`;
   }).join('');
+}
+/* ============ EDIT & HAPUS CATATAN IURAN (bulan berjalan sesuai tab yang dibuka) ============ */
+function editIuranManual(id){
+  const w = STATE.warga.find(x=>x.id===id);
+  if(!w) return;
+  const tagihan = w.iuran || STATE.profil.iuranDefault || 0;
+  const info = getIuranInfo(id);
+  const dibayarLama = (typeof info.dibayar === 'number') ? info.dibayar : (info.lunas ? tagihan : 0);
+  const input = prompt('Ubah jumlah iuran '+w.kepala+' yang dibayar untuk bulan '+monthLabel(currentBulan)+' (Rp):\n(Tagihan: '+rupiah(tagihan)+'. Isi 0 untuk menandai belum bayar.)', dibayarLama);
+  if(input===null) return;
+  const dibayar = parseInt(String(input).replace(/[^0-9]/g,''));
+  if(isNaN(dibayar) || dibayar<0){ toast('Jumlah tidak valid'); return; }
+  if(!STATE.iuran[currentBulan]) STATE.iuran[currentBulan] = {};
+  if(dibayar===0){
+    delete STATE.iuran[currentBulan][id];
+    queuePush('iuran','upsert', { bulan: currentBulan, wargaId: id, lunas:false });
+  } else {
+    const selisih = dibayar - tagihan;
+    STATE.iuran[currentBulan][id] = { lunas:true, dibayar, tagihan, selisih };
+    queuePush('iuran','upsert', { bulan: currentBulan, wargaId: id, lunas:true, dibayar, tagihan, selisih });
+  }
+  saveState();
+  toast('Catatan iuran diperbarui');
+  renderIuranList(); renderWargaList(); renderDashboard(); renderLaporanWarga();
+  const sheetDetail = document.getElementById('sheet-detail');
+  if(sheetDetail && !sheetDetail.classList.contains('hidden')) openDetailWarga(id);
+}
+function hapusIuran(id){
+  const w = STATE.warga.find(x=>x.id===id);
+  if(!w) return;
+  if(!isLunas(id)){ toast('Belum ada catatan pembayaran untuk bulan ini'); return; }
+  if(!confirm('Hapus catatan iuran bulan '+monthLabel(currentBulan)+' untuk '+w.kepala+'? Status akan kembali jadi belum lunas.')) return;
+  if(STATE.iuran[currentBulan]) delete STATE.iuran[currentBulan][id];
+  saveState();
+  queuePush('iuran','upsert', { bulan: currentBulan, wargaId: id, lunas:false });
+  toast('Catatan iuran dihapus');
+  renderIuranList(); renderWargaList(); renderDashboard(); renderLaporanWarga();
+  const sheetDetail = document.getElementById('sheet-detail');
+  if(sheetDetail && !sheetDetail.classList.contains('hidden')) openDetailWarga(id);
 }
 
 function isMobileDevice(){
@@ -1910,6 +2132,8 @@ function renderWargaList(){
     w.kepala.toLowerCase().includes(q) || (w.noKK||'').includes(q) ||
     w.anggota.some(a=>(a.nik||'').includes(q) || a.nama.toLowerCase().includes(q))
   );
+  const sortSel = document.getElementById('w-sort');
+  arr = sortWargaArray(arr, sortSel ? sortSel.value : 'nama-asc');
   const list = document.getElementById('warga-list');
   if(STATE.warga.length===0){
     list.innerHTML = `<div class="empty"><div class="big">👨‍👩‍👧‍👦</div>Belum ada warga terdaftar.<br><br><button class="btn btn-primary" style="width:auto;display:inline-flex;padding:12px 20px;" onclick="openTambahWarga()">+ Tambah warga pertama</button></div>`;
@@ -1921,7 +2145,7 @@ function renderWargaList(){
     return `<div class="warga-row ${lunas?'lunas':'nunggak'}" onclick="openDetailWarga('${w.id}')">
       <div class="avatar">${(w.kepala||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
-        <div class="name">${w.kepala}</div>
+        <div class="name">${w.kepala}${kkTagHTML(w)}</div>
         <div class="meta">${w.anggota.length} anggota · ${w.noKK||'No KK -'}</div>
       </div>
       <span class="badge ${lunas?'lunas':'nunggak'}">${lunas?'LUNAS':'NUNGGAK'}</span>
@@ -2693,7 +2917,8 @@ function renderLaporanWarga(){
   const elList = document.getElementById('laporan-list');
   if(!elList) return;
   const q = (document.getElementById('lap-search').value||'').trim().toLowerCase();
-  let list = (STATE.warga||[]).slice().sort((a,b)=>(a.kepala||'').localeCompare(b.kepala||''));
+  const sortSel = document.getElementById('lap-sort');
+  let list = sortWargaArray((STATE.warga||[]).slice(), sortSel ? sortSel.value : 'nama-asc');
   if(q){
     list = list.filter(w=>
       (w.kepala||'').toLowerCase().includes(q) ||
@@ -2729,10 +2954,11 @@ function renderLaporanWarga(){
     let catatanBayar = '';
     if(statusBulanIni && infoIuran.selisih < 0) catatanBayar = `<div style="font-size:11.5px;color:#C0392B;margin-top:2px;">Kurang bayar ${rupiah(-infoIuran.selisih)}</div>`;
     else if(statusBulanIni && infoIuran.selisih > 0) catatanBayar = `<div style="font-size:11.5px;color:#1a7a3a;margin-top:2px;">Lebih bayar ${rupiah(infoIuran.selisih)}</div>`;
+    const riwayatId = 'riw-'+w.id;
     return `
       <div class="card" style="margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div style="font-weight:700;font-size:14.5px;">${escapeHTML(w.kepala||'-')}</div>
+          <div style="font-weight:700;font-size:14.5px;">${escapeHTML(w.kepala||'-')}${kkTagHTML(w)}</div>
           <div style="text-align:right;">
             <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'IURAN LUNAS':'IURAN NUNGGAK'}</span>
             ${catatanBayar}
@@ -2744,8 +2970,16 @@ function renderLaporanWarga(){
           <b class="mono" style="color:#1a7a3a;">${rupiah(bsSaldo(w))}</b>
         </div>
         ${anggotaHTML || '<div class="empty" style="padding:8px 0;">Belum ada data anggota.</div>'}
+        <div style="margin-top:10px;">
+          <div class="link" style="font-size:12.5px;font-weight:600;color:var(--primary);cursor:pointer;" onclick="toggleRiwayatLaporan('${riwayatId}')">📜 Lihat riwayat keuangan (iuran &amp; bank sampah)</div>
+          <div id="${riwayatId}" class="hidden" style="margin-top:8px;">${renderRiwayatKeuanganHTML(w)}</div>
+        </div>
       </div>`;
   }).join('');
+}
+function toggleRiwayatLaporan(elId){
+  const el = document.getElementById(elId);
+  if(el) el.classList.toggle('hidden');
 }
 
 /* ============ INIT ============ */
