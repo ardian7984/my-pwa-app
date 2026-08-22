@@ -459,6 +459,26 @@
       <button class="btn btn-primary" onclick="saveProfil()">Simpan pengaturan</button>
     </div>
 
+    <div class="section-title" style="margin-top:24px;">Akun &amp; Kata Sandi</div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Tersimpan di HP ini saja (lihat catatan di kode). Hanya Pengurus yang bisa mengubah halaman ini.</p>
+    <label>Username Pengurus RT</label>
+    <input id="acc-admin-user" placeholder="admin">
+    <label>Password baru <span style="font-weight:400;color:var(--ink-soft)">(kosongkan jika tidak diubah)</span></label>
+    <input id="acc-admin-pass" type="password" placeholder="Password baru">
+    <div style="margin-top:10px;">
+      <button class="btn btn-outline" onclick="saveAdminAccount()">Simpan akun pengurus</button>
+    </div>
+
+    <div class="section-title" style="margin-top:18px;font-size:14px;">Akun Warga (boleh lebih dari satu)</div>
+    <div id="acc-warga-list"></div>
+    <div class="field-2" style="margin-top:10px;">
+      <div><label>Username baru</label><input id="acc-warga-user-new" placeholder="cth. warga2"></div>
+      <div><label>Password baru</label><input id="acc-warga-pass-new" placeholder="password"></div>
+    </div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-outline" onclick="addWargaAccount()">+ Tambah akun warga</button>
+    </div>
+
     <div class="section-title" style="margin-top:24px;">Sinkronisasi data bersama (Google Sheets)</div>
     <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Supaya semua pengurus RT melihat data yang sama. Lihat panduan setup di file Code.gs yang diberikan.</p>
     <label>URL Web App (dari Google Apps Script)</label>
@@ -549,12 +569,13 @@ Ani Santoso, 3371011234560002, Istri, A"></textarea>
     </div>
 
     <div class="section-title" style="margin-top:22px;">Pindahkan ke Kas RT</div>
-    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Seperti pindah kantong tabungan (ala Bank Jago) — saldo bank sampah dipindah untuk langsung melunasi iuran rutin bulan berjalan, atau disetor umum ke kas RT.</p>
-    <button class="btn btn-outline" onclick="pindahSampahKeKasRT('iuran')">💳 Bayar iuran bulan ini dari tabungan</button>
-    <label style="margin-top:12px;">Jumlah setor umum ke kas RT (Rp)</label>
-    <input id="bs-jumlah-pindah" type="number" inputmode="numeric" placeholder="cth. 20000">
-    <div style="margin-top:8px;">
-      <button class="btn btn-outline" onclick="pindahSampahKeKasRT('umum')">↔️ Setor ke kas RT</button>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Seperti pindah kantong tabungan (ala Bank Jago) — saldo bank sampah dipindah untuk melunasi iuran rutin bulan berjalan, atau disetor umum ke kas RT. Untuk iuran, jumlah yang dipindah boleh kurang atau lebih dari tagihan — nanti otomatis dicatat sebagai kurang bayar / lebih bayar.</p>
+    <div id="bs-tagihan-info" style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;"></div>
+    <label>Jumlah yang dipindah (Rp)</label>
+    <input id="bs-jumlah-pindah" type="number" inputmode="numeric" placeholder="cth. 50000">
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-outline" onclick="pindahSampahKeKasRT('iuran')">💳 Untuk bayar iuran</button>
+      <button class="btn btn-outline" onclick="pindahSampahKeKasRT('umum')">↔️ Setor umum</button>
     </div>
 
     <div class="section-title" style="margin-top:22px;">Riwayat transaksi</div>
@@ -733,6 +754,35 @@ let editingWargaId = null;
 let pendingKKImage = null;
 let bankSampahWargaId = null;
 
+/* ============ AKUN & KATA SANDI ============
+   Disimpan LOKAL di HP masing-masing (bagian dari STORAGE_KEY, sama seperti data
+   lain) — bukan lewat sinkronisasi Google Sheets (Code.gs belum punya kolom untuk
+   ini). Artinya kalau ditambah akun warga baru di satu HP pengurus, akun itu
+   berlaku di HP tersebut; kalau ingin dipakai warga di HP lain, harus disetel juga
+   di HP itu, ATAU pengurus memberi tahu kredensialnya ke warga bersangkutan yang
+   lalu login memakainya (kredensial dicocokkan lokal saat login, tidak perlu
+   internet). Untuk kebutuhan satu set akun yang seragam di semua HP pengurus,
+   perlu penyesuaian lanjutan di Code.gs (di luar kemampuan file ini). */
+function ensureDefaultAccounts(){
+  if(!STATE.accounts) STATE.accounts = {};
+  if(!STATE.accounts.admin || !STATE.accounts.admin.user) STATE.accounts.admin = { user:'admin', pass:'admin' };
+  if(!Array.isArray(STATE.accounts.wargaUsers)) STATE.accounts.wargaUsers = [];
+  if(STATE.accounts.wargaUsers.length===0) STATE.accounts.wargaUsers.push({ id: uid(), user:'warga', pass:'warga' });
+}
+// Baca akun dari localStorage TANPA menunggu loadState()+render() penuh, supaya
+// layar login (yang tampil sebelum aplikasi utama dimuat) sudah bisa mencocokkan
+// username/password sesuai yang terakhir disimpan pengurus.
+function preloadAccounts(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.accounts) STATE.accounts = parsed.accounts;
+    }
+  }catch(e){ console.error('preload accounts failed', e); }
+  ensureDefaultAccounts();
+}
+
 /* ============ BANK SAMPAH ============
    Tiap KK punya "kantong" tabungan bank sampah sendiri (mirip Bank Jago),
    diisi dari hasil setor/jual sampah. Saldo ini bisa dipindahkan kapan saja
@@ -810,6 +860,7 @@ async function loadState(){
       if(!STATE.profil.namaSingkat) STATE.profil.namaSingkat = 'RT 01';
     }
   }catch(e){ console.error('load failed', e); }
+  ensureDefaultAccounts();
   render();
 }
 let saveTimer=null;
@@ -941,8 +992,55 @@ async function pullFromServer(silent){
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Gagal mengambil data');
     if(data.profil) STATE.profil = Object.assign({}, STATE.profil, data.profil);
-    STATE.warga = filterTombstoned('warga', data.warga);
-    STATE.iuran = data.iuran || {};
+    // PENTING: skrip Google Sheets (Code.gs) belum mengenal kolom "bank sampah" (fitur baru),
+    // jadi setiap data ditarik ulang dari server, kolom itu akan hilang dari hasilnya kalau
+    // langsung ditimpa mentah-mentah. Di sini digabung (merge) per KK: field yang TIDAK
+    // dikirim balik oleh server (mis. bankSampah) dipertahankan dari data lokal yang sudah ada,
+    // sementara field lain (nama, alamat, dll) tetap mengikuti versi terbaru dari server.
+    // Konsekuensinya: saldo tabungan bank sampah untuk saat ini HANYA tersimpan di HP masing-
+    // masing (belum ikut sinkron ke HP pengurus lain) sampai Code.gs diperbarui untuk menyimpan
+    // kolom ini juga.
+    const localWargaById = {};
+    (STATE.warga||[]).forEach(w=>{ if(w && w.id) localWargaById[w.id] = w; });
+    const incomingWarga = filterTombstoned('warga', data.warga);
+    // Jangan biarkan daftar warga lokal yang sudah terisi ditimpa jadi kosong hanya karena
+    // server mengembalikan daftar kosong (mis. error sementara/kuota Apps Script) — itu yang
+    // menyebabkan data warga & laporan tiba-tiba "hilang" walau sebenarnya masih ada di server.
+    if(incomingWarga.length===0 && (STATE.warga||[]).length>0){
+      console.log('Pull warga kosong dari server, data lokal dipertahankan untuk berjaga-jaga.');
+    } else {
+      STATE.warga = incomingWarga.map(sw=>{
+        const local = localWargaById[sw.id];
+        if(local && local.bankSampah && !sw.bankSampah){
+          sw = Object.assign({}, sw, { bankSampah: local.bankSampah });
+        }
+        return sw;
+      });
+    }
+    // Sama seperti bankSampah di atas: Code.gs belum tentu mengenal rincian kurang/lebih
+    // bayar iuran (dibayar/tagihan/selisih, fitur baru) — kalau tidak, gabungkan supaya
+    // rincian itu tidak hilang begitu ditarik ulang dari server.
+    const incomingIuran = data.iuran || {};
+    const mergedIuran = {};
+    Object.keys(incomingIuran).forEach(bulan=>{
+      mergedIuran[bulan] = {};
+      Object.keys(incomingIuran[bulan]||{}).forEach(wid=>{
+        const serverVal = incomingIuran[bulan][wid];
+        const localVal = STATE.iuran[bulan] && STATE.iuran[bulan][wid];
+        const serverIsPlainBool = serverVal && typeof serverVal !== 'object';
+        const localHasRincian = localVal && typeof localVal === 'object';
+        mergedIuran[bulan][wid] = (serverIsPlainBool && localHasRincian && !!localVal.lunas === !!serverVal)
+          ? localVal
+          : serverVal;
+      });
+    });
+    Object.keys(STATE.iuran).forEach(bulan=>{
+      if(!mergedIuran[bulan]) mergedIuran[bulan] = {};
+      Object.keys(STATE.iuran[bulan]).forEach(wid=>{
+        if(!incomingIuran[bulan] || !(wid in incomingIuran[bulan])) mergedIuran[bulan][wid] = STATE.iuran[bulan][wid];
+      });
+    });
+    STATE.iuran = mergedIuran;
     STATE.surat = filterTombstoned('surat', data.surat);
     STATE.undangan = filterTombstoned('undangan', data.undangan);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
@@ -1059,6 +1157,7 @@ function openProfil(){
   document.getElementById('p-telp-surat').value = STATE.profil.telpSurat||'';
   document.getElementById('p-aksara-jawa').value = STATE.profil.aksaraJawa||'';
   openSyncSettings();
+  renderAccountsUI();
   openSheet('sheet-profil');
 }
 function saveProfil(){
@@ -1081,6 +1180,64 @@ function saveProfil(){
   document.getElementById('tb-eyebrow').textContent = 'Aplikasi RT';
   toast('Pengaturan disimpan');
   render();
+}
+
+/* ============ AKUN & KATA SANDI (hanya bisa diubah oleh Pengurus) ============ */
+function renderAccountsUI(){
+  document.getElementById('acc-admin-user').value = STATE.accounts.admin.user;
+  document.getElementById('acc-admin-pass').value = '';
+  const list = STATE.accounts.wargaUsers||[];
+  document.getElementById('acc-warga-list').innerHTML = list.length===0
+    ? '<div style="font-size:12.5px;color:var(--ink-soft);padding:6px 0;">Belum ada akun warga.</div>'
+    : list.map(a=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
+        <div style="font-weight:600;font-size:13.5px;">${escapeHTML(a.user)}</div>
+        <div style="display:flex;gap:6px;">
+          <button class="icon-btn" onclick="gantiPasswordWarga('${a.id}')" aria-label="Ganti password" title="Ganti password">🔑</button>
+          <button class="icon-btn" onclick="hapusAkunWarga('${a.id}')" aria-label="Hapus akun" title="Hapus akun">🗑️</button>
+        </div>
+      </div>`).join('');
+}
+function saveAdminAccount(){
+  const u = document.getElementById('acc-admin-user').value.trim();
+  const p = document.getElementById('acc-admin-pass').value;
+  if(!u){ toast('Username tidak boleh kosong'); return; }
+  STATE.accounts.admin.user = u;
+  if(p) STATE.accounts.admin.pass = p;
+  saveState();
+  document.getElementById('acc-admin-pass').value = '';
+  toast('Akun pengurus diperbarui — dipakai mulai login berikutnya');
+}
+function addWargaAccount(){
+  const u = document.getElementById('acc-warga-user-new').value.trim();
+  const p = document.getElementById('acc-warga-pass-new').value;
+  if(!u || !p){ toast('Isi username & password akun baru'); return; }
+  if((STATE.accounts.wargaUsers||[]).some(a=>a.user===u)){ toast('Username itu sudah dipakai'); return; }
+  STATE.accounts.wargaUsers.push({ id: uid(), user:u, pass:p });
+  saveState();
+  document.getElementById('acc-warga-user-new').value = '';
+  document.getElementById('acc-warga-pass-new').value = '';
+  renderAccountsUI();
+  toast('Akun warga ditambahkan');
+}
+function gantiPasswordWarga(id){
+  const acc = (STATE.accounts.wargaUsers||[]).find(a=>a.id===id);
+  if(!acc) return;
+  const p = prompt('Password baru untuk akun "'+acc.user+'":');
+  if(p===null) return;
+  if(!p.trim()){ toast('Password tidak boleh kosong'); return; }
+  acc.pass = p;
+  saveState();
+  toast('Password akun "'+acc.user+'" diganti');
+}
+function hapusAkunWarga(id){
+  const acc = (STATE.accounts.wargaUsers||[]).find(a=>a.id===id);
+  if(!acc) return;
+  if(!confirm('Hapus akun warga "'+acc.user+'"? Warga yang memakainya tidak bisa login lagi.')) return;
+  STATE.accounts.wargaUsers = STATE.accounts.wargaUsers.filter(a=>a.id!==id);
+  saveState();
+  renderAccountsUI();
+  toast('Akun warga dihapus');
 }
 
 /* ============ TAMBAH / SCAN WARGA ============ */
@@ -1379,7 +1536,11 @@ function openDetailWarga(id){
   const w = STATE.warga.find(x=>x.id===id);
   if(!w) return;
   document.getElementById('detail-name').textContent = w.kepala;
-  const statusBulanIni = !!(STATE.iuran[currentBulan] && STATE.iuran[currentBulan][id]);
+  const statusBulanIni = isLunas(id);
+  const infoIuranDetail = getIuranInfo(id);
+  let catatanBayarDetail = '';
+  if(statusBulanIni && infoIuranDetail.selisih < 0) catatanBayarDetail = '<div style="font-size:11.5px;color:#C0392B;margin-top:2px;">Kurang bayar '+rupiah(-infoIuranDetail.selisih)+'</div>';
+  else if(statusBulanIni && infoIuranDetail.selisih > 0) catatanBayarDetail = '<div style="font-size:11.5px;color:#1a7a3a;margin-top:2px;">Lebih bayar '+rupiah(infoIuranDetail.selisih)+'</div>';
   let html = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -1388,7 +1549,10 @@ function openDetailWarga(id){
           <div style="font-size:13.5px;margin-top:4px;">${w.alamat||'-'} ${w.blok?('· '+w.blok):''}</div>
           <div style="font-size:12.5px;margin-top:4px;color:var(--ink-soft);">Iuran/bulan: <b class="mono" style="color:var(--ink);">${rupiah(w.iuran || STATE.profil.iuranDefault || 0)}</b>${w.iuran?'':' (default)'}</div>
         </div>
-        <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'LUNAS':'NUNGGAK'}</span>
+        <div style="text-align:right;">
+          <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'LUNAS':'NUNGGAK'}</span>
+          ${catatanBayarDetail}
+        </div>
       </div>
     </div>
     <div class="card" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
@@ -1462,6 +1626,15 @@ function openBankSampah(id){
   document.getElementById('bs-jumlah').value = '';
   document.getElementById('bs-ket').value = '';
   document.getElementById('bs-jumlah-pindah').value = '';
+  const tagihan = w.iuran || STATE.profil.iuranDefault || 0;
+  const infoIuran = getIuranInfo(w.id);
+  let infoTxt = 'Tagihan iuran '+monthLabel(currentBulan)+': <b class="mono">'+rupiah(tagihan)+'</b>';
+  if(infoIuran.lunas){
+    if(infoIuran.selisih < 0) infoTxt += ' — <span style="color:#C0392B;">kurang bayar '+rupiah(-infoIuran.selisih)+'</span>';
+    else if(infoIuran.selisih > 0) infoTxt += ' — <span style="color:#1a7a3a;">lebih bayar '+rupiah(infoIuran.selisih)+'</span>';
+    else infoTxt += ' — <span style="color:#1a7a3a;">sudah lunas pas</span>';
+  }
+  document.getElementById('bs-tagihan-info').innerHTML = infoTxt;
   renderBankSampahRiwayat(w);
   closeSheet('sheet-detail');
   openSheet('sheet-banksampah');
@@ -1472,13 +1645,69 @@ function renderBankSampahRiwayat(w){
   const items = ((w.bankSampah&&w.bankSampah.riwayat)||[]).slice().reverse().slice(0,15);
   if(items.length===0){ el.innerHTML = '<div style="font-size:12.5px;color:var(--ink-soft);padding:8px 0;">Belum ada transaksi</div>'; return; }
   el.innerHTML = items.map(r=>`
-    <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;">
       <div>
         <div>${r.jenis==='setor' ? '♻️ Setor sampah' : '↔️ Pindah ke Kas RT'}${r.keterangan ? (' — '+escapeHTML(r.keterangan)) : ''}</div>
         <div class="mono" style="color:var(--ink-soft);">${new Date(r.tgl).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}</div>
       </div>
-      <div class="mono" style="font-weight:700;white-space:nowrap;color:${r.jenis==='setor'?'#1a7a3a':'#C0392B'};">${r.jenis==='setor'?'+':'-'}${rupiah(r.jumlah)}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <div class="mono" style="font-weight:700;white-space:nowrap;color:${r.jenis==='setor'?'#1a7a3a':'#C0392B'};">${r.jenis==='setor'?'+':'-'}${rupiah(r.jumlah)}</div>
+        <button class="icon-btn" style="width:28px;height:28px;" onclick="editRiwayatBankSampah('${r.id}')" aria-label="Edit">✏️</button>
+        <button class="icon-btn" style="width:28px;height:28px;" onclick="hapusRiwayatBankSampah('${r.id}')" aria-label="Hapus">🗑️</button>
+      </div>
     </div>`).join('');
+}
+function editRiwayatBankSampah(riwayatId){
+  const w = STATE.warga.find(x=>x.id===bankSampahWargaId);
+  if(!w) return;
+  ensureBankSampah(w);
+  const r = w.bankSampah.riwayat.find(x=>x.id===riwayatId);
+  if(!r) return;
+  const nominalBaru = prompt('Ubah jumlah transaksi ini (Rp):', r.jumlah);
+  if(nominalBaru===null) return;
+  const jumlah = parseInt(String(nominalBaru).replace(/[^0-9]/g,''));
+  if(!jumlah || jumlah<=0){ toast('Jumlah tidak valid'); return; }
+  // Batalkan efek jumlah lama ke saldo, lalu terapkan efek jumlah baru —
+  // supaya saldo tetap konsisten walau nominalnya dikoreksi.
+  const efekLama = r.jenis==='setor' ? r.jumlah : -r.jumlah;
+  const efekBaru = r.jenis==='setor' ? jumlah : -jumlah;
+  w.bankSampah.saldo = w.bankSampah.saldo - efekLama + efekBaru;
+  if(w.bankSampah.saldo < 0) w.bankSampah.saldo = 0;
+  r.jumlah = jumlah;
+  // Kalau transaksi ini dulu dipakai untuk melunasi iuran, status lunas TIDAK diubah otomatis
+  // di sini — jika ternyata koreksi ini membatalkan pelunasan iuran, cek ulang manual di tab Iuran.
+  saveState();
+  queuePush('warga','upsert', w);
+  toast('Transaksi diperbarui');
+  document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
+  renderBankSampahRiwayat(w);
+  renderWargaList(); renderDashboard();
+}
+function hapusRiwayatBankSampah(riwayatId){
+  const w = STATE.warga.find(x=>x.id===bankSampahWargaId);
+  if(!w) return;
+  ensureBankSampah(w);
+  const r = w.bankSampah.riwayat.find(x=>x.id===riwayatId);
+  if(!r) return;
+  let pesan = 'Hapus transaksi ini? Saldo tabungan akan disesuaikan kembali.';
+  if(r.jenis==='pindah_kas' && r.tujuan==='iuran' && r.bulanIuran){
+    pesan += ' Status iuran bulan '+monthLabel(r.bulanIuran)+' yang dulu ikut dilunaskan dari transaksi ini juga akan dikembalikan jadi belum lunas.';
+  }
+  if(!confirm(pesan)) return;
+  const efek = r.jenis==='setor' ? r.jumlah : -r.jumlah;
+  w.bankSampah.saldo = w.bankSampah.saldo - efek;
+  if(w.bankSampah.saldo < 0) w.bankSampah.saldo = 0;
+  w.bankSampah.riwayat = w.bankSampah.riwayat.filter(x=>x.id!==riwayatId);
+  if(r.jenis==='pindah_kas' && r.tujuan==='iuran' && r.bulanIuran){
+    if(STATE.iuran[r.bulanIuran]) STATE.iuran[r.bulanIuran][w.id] = false;
+    queuePush('iuran','upsert', { bulan: r.bulanIuran, wargaId: w.id, lunas: false });
+  }
+  saveState();
+  queuePush('warga','upsert', w);
+  toast('Transaksi dihapus');
+  document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
+  renderBankSampahRiwayat(w);
+  renderWargaList(); renderIuranList(); renderDashboard();
 }
 function catatSetoranSampah(){
   const w = STATE.warga.find(x=>x.id===bankSampahWargaId);
@@ -1501,25 +1730,34 @@ function pindahSampahKeKasRT(tujuan){
   const w = STATE.warga.find(x=>x.id===bankSampahWargaId);
   if(!w) return;
   ensureBankSampah(w);
-  let jumlah;
-  if(tujuan==='iuran'){
-    jumlah = w.iuran || STATE.profil.iuranDefault || 0;
-  } else {
-    jumlah = parseInt(document.getElementById('bs-jumlah-pindah').value);
-  }
-  if(!jumlah || jumlah<=0){ toast('Isi jumlah yang valid'); return; }
+  const jumlah = parseInt(document.getElementById('bs-jumlah-pindah').value);
+  if(!jumlah || jumlah<=0){ toast('Isi jumlah yang mau dipindah'); return; }
   if(jumlah > w.bankSampah.saldo){ toast('Saldo tabungan bank sampah tidak cukup'); return; }
   w.bankSampah.saldo -= jumlah;
-  const ket = tujuan==='iuran' ? ('Bayar iuran '+monthLabel(currentBulan)) : 'Setor umum ke kas RT';
-  w.bankSampah.riwayat.push({ id: uid(), tgl: Date.now(), jenis:'pindah_kas', jumlah, tujuan, keterangan: ket });
+  let ket = 'Setor umum ke kas RT';
+  let selisih = 0, tagihan = 0;
+  if(tujuan==='iuran'){
+    tagihan = w.iuran || STATE.profil.iuranDefault || 0;
+    selisih = jumlah - tagihan; // negatif = kurang bayar, positif = lebih bayar
+    ket = 'Bayar iuran '+monthLabel(currentBulan)
+      + (selisih < 0 ? ' (kurang bayar '+rupiah(-selisih)+')' : selisih > 0 ? ' (lebih bayar '+rupiah(selisih)+')' : '');
+  }
+  w.bankSampah.riwayat.push({ id: uid(), tgl: Date.now(), jenis:'pindah_kas', jumlah, tujuan, keterangan: ket, bulanIuran: tujuan==='iuran' ? currentBulan : null });
   if(tujuan==='iuran'){
     if(!STATE.iuran[currentBulan]) STATE.iuran[currentBulan] = {};
-    STATE.iuran[currentBulan][w.id] = true;
-    queuePush('iuran','upsert', { bulan: currentBulan, wargaId: w.id, lunas: true });
+    // Disimpan sebagai objek (bukan sekadar true/false) supaya tercatat berapa yang
+    // ditagihkan vs berapa yang benar-benar dipindah — dipakai untuk menampilkan
+    // catatan "kurang bayar"/"lebih bayar". isLunas() tetap jalan karena objek ini
+    // tetap truthy seperti halnya `true` sebelumnya.
+    STATE.iuran[currentBulan][w.id] = { lunas:true, dibayar:jumlah, tagihan, selisih };
+    queuePush('iuran','upsert', { bulan: currentBulan, wargaId: w.id, lunas: true, dibayar: jumlah, tagihan, selisih });
   }
   saveState();
   queuePush('warga','upsert', w);
-  toast(tujuan==='iuran' ? 'Iuran bulan ini lunas dari tabungan bank sampah' : 'Tabungan dipindahkan ke kas RT');
+  let pesanToast = tujuan==='iuran' ? 'Iuran bulan ini dicatat lunas dari tabungan bank sampah' : 'Tabungan dipindahkan ke kas RT';
+  if(tujuan==='iuran' && selisih<0) pesanToast += ' — kurang bayar '+rupiah(-selisih);
+  if(tujuan==='iuran' && selisih>0) pesanToast += ' — lebih bayar '+rupiah(selisih);
+  toast(pesanToast);
   document.getElementById('bs-jumlah-pindah').value='';
   document.getElementById('bs-saldo').textContent = rupiah(w.bankSampah.saldo);
   renderBankSampahRiwayat(w);
@@ -1544,6 +1782,16 @@ function setIuranFilter(f){
   renderIuranList();
 }
 function isLunas(wargaId, bulan){ bulan = bulan||currentBulan; return !!(STATE.iuran[bulan] && STATE.iuran[bulan][wargaId]); }
+// Membaca detail pembayaran iuran (bukan cuma lunas/tidak) — dipakai untuk menampilkan
+// catatan "kurang bayar"/"lebih bayar" kalau pelunasan lewat pindah kantong bank sampah
+// jumlahnya tidak persis sama dengan tagihan.
+function getIuranInfo(wargaId, bulan){
+  bulan = bulan||currentBulan;
+  const raw = STATE.iuran[bulan] && STATE.iuran[bulan][wargaId];
+  if(!raw) return { lunas:false, selisih:0 };
+  if(typeof raw === 'object') return { lunas: !!raw.lunas, dibayar: raw.dibayar, tagihan: raw.tagihan, selisih: raw.selisih||0 };
+  return { lunas:true, selisih:0 }; // ditandai lunas manual (toggle), tanpa rincian jumlah
+}
 function toggleLunas(id){
   if(!STATE.iuran[currentBulan]) STATE.iuran[currentBulan] = {};
   STATE.iuran[currentBulan][id] = !STATE.iuran[currentBulan][id];
@@ -1568,11 +1816,16 @@ function renderIuranList(){
   if(arr.length===0){ list.innerHTML = `<div class="empty">Tidak ada warga di kategori ini.</div>`; return; }
   list.innerHTML = arr.map(w=>{
     const lunas = isLunas(w.id);
+    const info = getIuranInfo(w.id);
+    let catatan = '';
+    if(lunas && info.selisih < 0) catatan = '<div class="meta" style="color:#C0392B;">Kurang bayar '+rupiah(-info.selisih)+'</div>';
+    else if(lunas && info.selisih > 0) catatan = '<div class="meta" style="color:#1a7a3a;">Lebih bayar '+rupiah(info.selisih)+'</div>';
     return `<div class="warga-row ${lunas?'lunas':'nunggak'}" onclick="openDetailWarga('${w.id}')">
       <div class="avatar">${(w.kepala||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${w.kepala}</div>
         <div class="meta">${w.noKK||'No KK -'} ${w.blok?('· '+w.blok):''}</div>
+        ${catatan}
       </div>
       <span class="badge ${lunas?'lunas':'nunggak'}" onclick="event.stopPropagation(); toggleLunas('${w.id}')">${lunas?'LUNAS':'NUNGGAK'}</span>
     </div>`;
@@ -2328,14 +2581,14 @@ function render(){
    antar-pengguna di lingkungan RT yang saling percaya — bukan proteksi
    tingkat bank. Siapa pun yang cukup paham teknis & membuka kode sumber
    halaman ini bisa melihat kredensialnya. Jangan pakai untuk data sangat
-   rahasia. */
+   rahasia.
+   Kredensial sekarang disimpan di STATE.accounts (bukan lagi konstanta tetap)
+   supaya pengurus bisa mengubah password & menambah akun warga sendiri lewat
+   Pengaturan RT — lihat catatan lengkap di ensureDefaultAccounts()/preloadAccounts(). */
 const AUTH_KEY = 'rt-app-auth';
-const VALID_CREDENTIALS = {
-  admin: { user:'admin', pass:'admin' },
-  warga: { user:'warga', pass:'warga' }
-};
 let loginRoleSelected = 'admin';
 let CURRENT_ROLE = null;
+let CURRENT_USER_ID = null;
 
 function setLoginRole(role){
   loginRoleSelected = role;
@@ -2347,10 +2600,18 @@ function setLoginRole(role){
 function doLogin(){
   const u = document.getElementById('login-user').value.trim();
   const p = document.getElementById('login-pass').value;
-  const cred = VALID_CREDENTIALS[loginRoleSelected];
   const errEl = document.getElementById('login-error');
-  if(u===cred.user && p===cred.pass){
-    localStorage.setItem(AUTH_KEY, JSON.stringify({role:loginRoleSelected, loginAt:Date.now()}));
+  let ok = false, userId = null;
+  if(loginRoleSelected==='admin'){
+    const cred = STATE.accounts.admin;
+    ok = (u===cred.user && p===cred.pass);
+  } else {
+    const found = (STATE.accounts.wargaUsers||[]).find(a=>a.user===u && a.pass===p);
+    ok = !!found;
+    if(found) userId = found.id;
+  }
+  if(ok){
+    localStorage.setItem(AUTH_KEY, JSON.stringify({role:loginRoleSelected, userId, loginAt:Date.now()}));
     errEl.style.display = 'none';
     document.getElementById('login-user').value = '';
     document.getElementById('login-pass').value = '';
@@ -2393,6 +2654,7 @@ function applyRoleUI(){
 function startApp(){
   const auth = getAuth();
   CURRENT_ROLE = auth ? auth.role : null;
+  CURRENT_USER_ID = auth ? (auth.userId||null) : null;
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').style.display = 'block';
   document.getElementById('login-logo').src = LOGO_SRC;
@@ -2406,8 +2668,11 @@ function initAuth(){
   // kop surat resmi) — sebelumnya src cuma diisi di dalam startApp(), yang baru
   // jalan SETELAH login sukses, jadi layar login selalu menampilkan lingkaran kosong.
   document.getElementById('login-logo').src = LOGO_SRC;
+  // Muat daftar akun dari HP ini dulu (tanpa nunggu loadState() penuh) supaya layar
+  // login sudah bisa mencocokkan username/password sesuai yang terakhir disimpan.
+  preloadAccounts();
   const auth = getAuth();
-  if(auth && VALID_CREDENTIALS[auth.role]){
+  if(auth && (auth.role==='admin' || auth.role==='warga')){
     startApp();
   }else{
     document.getElementById('login-screen').classList.remove('hidden');
@@ -2459,16 +2724,23 @@ function renderLaporanWarga(){
           ${a.golDarah ? `<div class="k" style="color:var(--warn);font-weight:700;">🩸 ${escapeHTML(a.golDarah)}</div>` : `<div class="k" style="color:var(--ink-soft);">-</div>`}
         </div>
       </div>`).join('');
-    const statusBulanIni = !!(STATE.iuran[currentBulan] && STATE.iuran[currentBulan][w.id]);
+    const statusBulanIni = isLunas(w.id);
+    const infoIuran = getIuranInfo(w.id);
+    let catatanBayar = '';
+    if(statusBulanIni && infoIuran.selisih < 0) catatanBayar = `<div style="font-size:11.5px;color:#C0392B;margin-top:2px;">Kurang bayar ${rupiah(-infoIuran.selisih)}</div>`;
+    else if(statusBulanIni && infoIuran.selisih > 0) catatanBayar = `<div style="font-size:11.5px;color:#1a7a3a;margin-top:2px;">Lebih bayar ${rupiah(infoIuran.selisih)}</div>`;
     return `
       <div class="card" style="margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div style="font-weight:700;font-size:14.5px;">${escapeHTML(w.kepala||'-')}</div>
-          <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'IURAN LUNAS':'IURAN NUNGGAK'}</span>
+          <div style="text-align:right;">
+            <span class="badge ${statusBulanIni?'lunas':'nunggak'}">${statusBulanIni?'IURAN LUNAS':'IURAN NUNGGAK'}</span>
+            ${catatanBayar}
+          </div>
         </div>
         <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">No KK: ${escapeHTML(w.noKK||'-')}${w.blok?(' &middot; Blok '+escapeHTML(w.blok)):''}<br>${escapeHTML(w.alamat||'-')}</div>
         <div style="display:flex;justify-content:space-between;font-size:12.5px;background:var(--paper2,#F7F5EF);border-radius:10px;padding:8px 10px;margin-bottom:10px;">
-          <span>♻️ Tabungan bank sampah</span>
+          <span>♻️ Saldo kas (tabungan bank sampah)</span>
           <b class="mono" style="color:#1a7a3a;">${rupiah(bsSaldo(w))}</b>
         </div>
         ${anggotaHTML || '<div class="empty" style="padding:8px 0;">Belum ada data anggota.</div>'}
